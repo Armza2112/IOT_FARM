@@ -67,7 +67,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             ESP_LOGE("WIFI", "STA disconnected, reason: %d", disc->reason);
             xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
             xEventGroupSetBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
-            // stop_sntp();
+            stop_sntp();
             if (user_disconnect)
             {
                 ESP_LOGI("WIFI", "User disconnect");

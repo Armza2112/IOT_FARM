@@ -9,7 +9,8 @@ typedef enum {
 extern QueueHandle_t ds1307_queue;
 extern int hour_ds1307;
 extern int min_ds1307;
-
+extern bool time_ready;
 void sntp_ds1307_task();
 void ds1307_get_time();
 void initialize_sntp();
+void stop_sntp();

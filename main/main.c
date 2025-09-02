@@ -44,14 +44,23 @@ void app_main(void)
     i2c_master_init();
     mutex_init();
     xTaskCreate(ryr404a_task, "ryr404a_task", 4096, NULL, 5, NULL);
-    xTaskCreate(do7019_task, "do7019_task", 4096, NULL, 5, NULL);
     xTaskCreate(i2c_main_task, "i2c_main_task", 4096, NULL, 5, NULL);
+    vTaskDelay(pdMS_TO_TICKS(60000));
     // initsettingsuuid();
     // load_uuid_from_spiffs();
     // device_register_or_update("MyWiFiSSID", "192.168.1.123", -55, 1, boardstatus);
-    mqtt_init();
     // vTaskDelay(pdMS_TO_TICKS(60000));
-    xTaskCreate(mqtt_task, "mqtt_task", 12288, NULL, 5, NULL);
 
+    // while (!time_ready)
+    // {
+    //     ESP_LOGW("Main", "Waiting for SNTP time sync...");
+    //     vTaskDelay(pdMS_TO_TICKS(1000));
+    // }
+
+    // ESP_LOGI("Main", "Time ready, starting tasks...");
+
+    xTaskCreate(do7019_task, "do7019_task", 4096, NULL, 5, NULL);
+    mqtt_init();
+    xTaskCreate(mqtt_task, "mqtt_task", 20480, NULL, 5, NULL);
     button_task();
 }

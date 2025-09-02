@@ -5,19 +5,19 @@
 #include <stdint.h>
 
 /**
- * @brief อ่าน MAC address ของ Wi-Fi STA
+ * @brief
  *
- * @param mac_str buffer ขนาดอย่างน้อย 18 bytes
- * @param len ความยาว buffer
- * @return esp_err_t ESP_OK ถ้าสำเร็จ
+ * @param mac_str
+ * @param len
+ * @return
  */
 esp_err_t get_sta_mac(char *mac_str, size_t len);
 
 /**
- * @brief อ่าน RSSI ของ Wi-Fi STA
+ * @brief
  *
- * @param rssi pointer สำหรับเก็บค่า RSSI (dBm)
- * @return esp_err_t ESP_OK ถ้าสำเร็จ
+ * @param rssi
+ * @return
  */
 esp_err_t get_sta_rssi(int *rssi, char *rssi_str, size_t str_len);
 

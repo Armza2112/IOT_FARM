@@ -107,7 +107,6 @@ void i2c_main_task()
         }
         else
         {
-
             safe_i2c_action(draw_main_screen);
             ESP_LOGI("I2C_FLAG", "After draw_main_screen: i2c_busy=%s", i2c_busy ? "true" : "false");
         }

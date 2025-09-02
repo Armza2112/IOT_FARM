@@ -18,7 +18,7 @@ void IRAM_ATTR button_isr_handler(void *arg)
     int level = gpio_get_level(MODE_BUTTON);
     if (level == 0)
     {
-        esp_timer_start_once(long_press_timer, 5000000); // 5 sec
+        esp_timer_start_once(long_press_timer, pdMS_TO_TICKS(5000)); 
     }
     else
     {

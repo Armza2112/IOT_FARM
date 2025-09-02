@@ -2,16 +2,16 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
-#include <time.h> 
+#include <time.h>
 #include "esp_log.h"
 #include "lwip/apps/sntp.h"
 #include "driver/i2c.h"
 #include "../i2c_manage/i2c_manage.h"
 #define DS1307_ADDR 0x68
 
-int hour_ds1307 ;
-int min_ds1307 ;
-
+int hour_ds1307;
+int min_ds1307;
+bool time_ready = false;
 static const char *TAG = "DS1307";
 
 void initialize_sntp()
@@ -42,6 +42,7 @@ void initialize_sntp()
     else
     {
         ESP_LOGI("SNTP", "Time synchronized: %s", asctime(&timeinfo));
+        time_ready =true;
     }
 }
 
