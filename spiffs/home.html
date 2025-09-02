@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home page</title>
+    <style>
+         @font-face {
+            font-family: 'headerfont';
+            src: url('/assets/fnt/header.ttf') format('truetype');
+        }
+         @font-face {
+            font-family: 'detailfont';
+            src: url('/assets/fnt/detail.ttf') format('truetype');
+        }
+        .button{
+            width: 350px;
+            height: 40px;
+            border-radius: 10px;
+            font-family: 'detailfont';
+            font-weight: bold;
+        }
+        .text__wifi{
+            color: white;
+            font-family: 'detailfont';
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body style="display: flex; justify-content: center; flex-direction:column; align-items: center; margin: 0; background-color: #262626; gap:50px; padding-left:50px; padding-right:50px; height: calc(var(--vh, 1vh) * 100);">
+    <div style="display: flex; align-items: center; "> 
+        <div>
+            <img src="/assets/img/LOGO.png" alt="Logo" width="110px">
+        </div>
+        <div style="margin-left:10px">
+            <div >
+                <h1 style="margin: 0; font-family:'headerfont'; color:white; font-size:42px";>IOT V6 WEB</h1>
+                <p style="text-align:right; margin: 0; font-family:'headerfont'; color:white; font-size:12px">V.0.0.1</p>
+            </div>
+            <div style="width: 100%; height:2px; background-color:grey; margin-top:5px; margin-bottom:5px;">
+            </div>
+            <div>
+                <h2 style="margin: 0; font-family:'headerfont'; color:grey">HOME PAGE</h2>
+            </div>
+        </div>
+    </div>
+    <div style="width: 100%; background-color:#2F2F2F; border-radius:10px; display:flex; justify-content:center; align-items:center;">
+        <div style="text-align:center">
+            <div style="gap:10px; display:flex; align-items:center;">
+                <img id="wifiIMG" width="20px"/>
+                <p id="wifiSSID" class="text__wifi" style="font-size: 12px;">-</p>
+            </div>
+            <p id="wifiRSSI" class="text__wifi" style="font-size: 10px;">-</p>
+        </div>
+    </div>
+    <div style="text-align:center;">
+        <p style="color: gray; font-family: 'headerfont'; font-size:22; margin-bottom:50px;">Detail</p>
+        <p style="color: white; font-family: 'headerfont'; font-size:22;">Mac address: %MAC%</p>
+        <p style="color: white; font-family: 'headerfont'; font-size:22;">Device ID: %DEVICE_ID%</p>
+        <p style="color: white; font-family: 'headerfont'; font-size:22;">Subscription: -</p>
+    </div>
+    <div style="display: flex; flex-direction:column; gap:10px; text-align:center">
+            <button class="button" style="background-color: #3B83C5; color:white" onclick="location.href='/wifimanage'">WiFi Manage</button>
+            <button class="button" style="background-color:#2F2F2F; color:#3B83C5" id="restartBtn";>Restart</button>
+            <p id="statusName" style="font-family: 'detailFont'; font-size:18; color:red;"></p>
+            <p style="color: gray; font-family: 'headerfont'; ">Powered by Lertthings</p>
+    </div>
+    <script>
+        let ssid = "%SSID%";  
+        let rrsi ="%RSSI%"
+        if (ssid && ssid !== "" && ssid!= "Not connected") {
+            document.getElementById('wifiIMG').src = "/assets/img/online.png";
+            document.getElementById('wifiSSID').textContent = "Connected to: "+ssid;
+            document.getElementById('wifiRSSI').textContent = "Level Signal: " + rrsi + "dbm";
+        } else {
+            document.getElementById('wifiIMG').src = "/assets/img/offline.png";
+            document.getElementById('wifiSSID').textContent = "Unconnected WiFi";
+        }
+        function setVh() {
+        let vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+        }
+        setVh();
+        window.addEventListener('resize', setVh);
+
+        const status = document.getElementById("statusName");
+        const btn = document.getElementById("restartBtn");
+
+        btn.addEventListener("click", async () => {
+            try {
+                const resp = await fetch("/restart", { method: "GET" });
+                const data = await resp.json(); 
+                if (data.status === "restart") {
+                    status.textContent = "Device is restarting...";
+                    status.style.color = "orange";
+                    setTimeout(() => {
+                window.location.reload(); 
+            }, 2000);
+                }
+            } catch (err) {
+                status.textContent = "Error connecting to ESP32";
+                status.style.color = "red";
+                console.error(err);
+            }
+        });
+    </script>
+</body>
+</html>

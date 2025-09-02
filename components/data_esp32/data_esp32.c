@@ -1,0 +1,40 @@
+#include "esp_wifi.h"
+#include <stdio.h>
+#include <string.h>
+
+// อ่าน MAC Address ของ STA
+esp_err_t get_sta_mac(char *mac_str, size_t len)
+{
+    if (!mac_str || len < 18)
+        return ESP_ERR_INVALID_ARG;
+
+    uint8_t mac[6];
+    esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, mac); // ใช้ WIFI_IF_STA แทน ESP_MAC_WIFI_STA
+    if (err != ESP_OK)
+        return err;
+
+    snprintf(mac_str, len, "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2],
+             mac[3], mac[4], mac[5]);
+    return ESP_OK;
+}
+
+// อ่าน RSSI ของ AP ที่เชื่อมต่อ
+esp_err_t get_sta_rssi(int *rssi, char *rssi_str, size_t str_len)
+{
+    if (!rssi || !rssi_str || str_len < 2)
+        return ESP_ERR_INVALID_ARG;
+
+    wifi_ap_record_t ap_info;
+    esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
+    if (err != ESP_OK)
+    {
+        *rssi = 0;           // ถ้าไม่ได้เชื่อมต่อ
+        snprintf(rssi_str, str_len, "0");
+        return err;
+    }
+
+    *rssi = ap_info.rssi;
+    snprintf(rssi_str, str_len, "%d", *rssi);
+    return ESP_OK;
+}

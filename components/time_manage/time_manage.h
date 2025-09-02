@@ -1,0 +1,15 @@
+#pragma once
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+
+typedef enum {
+    DS1307_CMD_SET_BOOT_TIME
+} ds1307_cmd_t;
+
+extern QueueHandle_t ds1307_queue;
+extern int hour_ds1307;
+extern int min_ds1307;
+
+void sntp_ds1307_task();
+void ds1307_get_time();
+void initialize_sntp();
