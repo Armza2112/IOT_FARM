@@ -160,7 +160,7 @@ void mqtt_spiffs()
         if (count == 50)
         {
             strcat(payload, "]");
-            esp_mqtt_client_publish(mqtt_client, "sensor/history", payload, 0, 1, 0);
+            esp_mqtt_client_publish(mqtt_client, "device/sensor/history", payload, 0, 1, 0);
             vTaskDelay(pdMS_TO_TICKS(500));
             count = 0;
             strcpy(payload, "[");

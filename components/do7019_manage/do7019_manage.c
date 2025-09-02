@@ -6,9 +6,10 @@
 #include <string.h>
 #include "esp_spiffs.h"
 #include "../time_manage/time_manage.h"
-
+#include "esp_log.h"
 #define HISTORY_SIZE 100
 #define TIME_STR_LEN 6
+
 float temp_history[HISTORY_SIZE] = {NAN};
 float oxygen_history[HISTORY_SIZE] = {NAN};
 float salinity_history[HISTORY_SIZE] = {NAN};
@@ -16,6 +17,8 @@ float do_history[HISTORY_SIZE] = {NAN};
 
 char time_history[HISTORY_SIZE][TIME_STR_LEN];
 int history_index = 0;
+
+void do7019_spiffs(float temp, float oxygen, float sanility, float do_value, const char *time_str);
 
 void add_sensor_reading(float temp, float oxygen, float sanility, float do_value, const char *time_str)
 {
@@ -34,8 +37,8 @@ void read_do7019()
     while (1)
     {
         snprintf(time_str, sizeof(time_str), "%02d:%02d", hour_ds1307, min_ds1307);
-        do7019_spiffs(30.0, 20, 1, 20, time_str);
-        add_sensor_reading(30.0, 20, 1, 20, time_str);
+        do7019_spiffs(30.0, 20, 1, 20, time_str); //test value
+        add_sensor_reading(30.0, 20, 1, 20, time_str); // test value
         vTaskDelay(pdMS_TO_TICKS(60000));
     }
 }
