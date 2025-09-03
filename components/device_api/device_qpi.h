@@ -26,5 +26,5 @@ void device_register_or_update(const char *ssid,
 
 extern char uuidcid[UUID_STR_LEN];
 extern char *mqttarr[2];
-
+void send_uuid_to_postman();
 #endif // DEVICE_API_H

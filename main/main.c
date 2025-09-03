@@ -16,6 +16,7 @@
 #include "../i2c_manage/i2c_manage.h"
 #include "../ryr404a_manage/ryr404a_manage.h"
 #include "../do7019_manage/do7019_manage.h"
+
 void init_spiffs()
 {
     esp_vfs_spiffs_conf_t conf = {
@@ -38,6 +39,7 @@ void init_spiffs()
 void app_main(void)
 {
     init_spiffs();
+    initsettingsuuid();
     ESP_ERROR_CHECK(modbus_master_init());
     wifi_init_apsta();
     connect_wifi_nvs();
@@ -45,22 +47,11 @@ void app_main(void)
     mutex_init();
     xTaskCreate(ryr404a_task, "ryr404a_task", 4096, NULL, 5, NULL);
     xTaskCreate(i2c_main_task, "i2c_main_task", 4096, NULL, 5, NULL);
-    vTaskDelay(pdMS_TO_TICKS(60000));
-    // initsettingsuuid();
-    // load_uuid_from_spiffs();
-    // device_register_or_update("MyWiFiSSID", "192.168.1.123", -55, 1, boardstatus);
-    // vTaskDelay(pdMS_TO_TICKS(60000));
-
-    // while (!time_ready)
-    // {
-    //     ESP_LOGW("Main", "Waiting for SNTP time sync...");
-    //     vTaskDelay(pdMS_TO_TICKS(1000));
-    // }
-
-    // ESP_LOGI("Main", "Time ready, starting tasks...");
-
     xTaskCreate(do7019_task, "do7019_task", 4096, NULL, 5, NULL);
     mqtt_init();
     xTaskCreate(mqtt_task, "mqtt_task", 20480, NULL, 5, NULL);
+    load_uuid_from_spiffs();
+    send_uuid_to_postman();
+    // device_register_or_update("MyWiFiSSID", "192.168.1.123", -55, 1, boardstatus);
     button_task();
 }

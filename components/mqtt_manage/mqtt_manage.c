@@ -47,7 +47,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG_MQTT, "MQTT Connected");
         mqtt_connected = true;
-        esp_mqtt_client_subscribe(event->client, "device/control/#", 2);
+        esp_mqtt_client_subscribe(event->client, "device/controls/#", 2);
         break;
     case MQTT_EVENT_DISCONNECTED:
         mqtt_connected = false;
@@ -73,21 +73,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI("MQTT", "TOPIC=%s", topic);
         ESP_LOGI("MQTT", "DATA=%s", payload);
 
-        if (strcmp(topic, "device/control/ryr404a") == 0)
+        if (strcmp(topic, "device/controls/ryr404a") == 0)
         {
             mqtt_ryr404a_callback(topic, payload);
         }
-        else if (strcmp(topic, "device/control/pca9557") == 0)
+        else if (strcmp(topic, "device/controls/pca9557") == 0)
         {
+          
             while (i2c_busy)
             {
-                ESP_LOGW("MQTT", "I2C busy, waiting...");
-                vTaskDelay(pdMS_TO_TICKS(10));
+                vTaskDelay(pdMS_TO_TICKS(5));
             }
-            i2c_busy = true; // flag for i2c_manage
+            i2c_busy = true;
             mqtt_pca9557_callback(topic, payload);
-            release_task_i2c(); // function release i2c_manage
-            i2c_busy = false;   // flag for i2c_manage
+            release_task_i2c();
+            i2c_busy = false;
         }
 
         free(payload);
