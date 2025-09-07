@@ -20,5 +20,7 @@ esp_err_t get_sta_mac(char *mac_str, size_t len);
  * @return
  */
 esp_err_t get_sta_rssi(int *rssi, char *rssi_str, size_t str_len);
-
+void load_uuid_from_spiffs();
+void load_data_task();
+extern char uuidcid[37];
 #endif // ESP_WIFI_INFO_H

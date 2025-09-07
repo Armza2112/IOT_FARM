@@ -5,8 +5,10 @@
 #include "esp_http_server.h"
 #include "nvs_flash.h"
 #include "esp_mac.h"
-#include "../wifi_manager/wifi_manager.h"
 #include "esp_log.h"
+#include "../wifi_manager/wifi_manager.h"
+#include "../data_esp32/data_esp32.h"
+#include "../device_api/device_api.h"
 
 esp_err_t restart_handle(httpd_req_t *req);
 esp_err_t connect_post_handler(httpd_req_t *req);
@@ -48,10 +50,6 @@ esp_err_t home(httpd_req_t *req)
     snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    char device_id[32];
-    snprintf(device_id, sizeof(device_id), "%02X%02X%02X%02X%02X%02X",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
     int rssi = 0;
     wifi_ap_record_t ap_info;
     if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK)
@@ -70,8 +68,9 @@ esp_err_t home(httpd_req_t *req)
     {
         replace_placeholder(line, sizeof(line), "%SSID%", ssid);
         replace_placeholder(line, sizeof(line), "%MAC%", mac_str);
-        replace_placeholder(line, sizeof(line), "%DEVICE_ID%", device_id);
+        replace_placeholder(line, sizeof(line), "%DEVICE_ID%", uuidcid); // get uuid form spiffs (device_api.c)
         replace_placeholder(line, sizeof(line), "%RSSI%", rssi_str);
+        replace_placeholder(line, sizeof(line), "%KEY%", key);
         if (httpd_resp_send_chunk(req, line, strlen(line)) != ESP_OK)
         {
             fclose(f);

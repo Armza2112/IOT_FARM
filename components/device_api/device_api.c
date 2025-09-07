@@ -8,63 +8,76 @@
 #include "cJSON.h"
 #include "esp_spiffs.h"
 #include "esp_crt_bundle.h"
-#define TAG "DEVICE_API"
-#define UUID_STR_LEN 37
-static const char *TAGUUID = "UUID_MANAGER";
+#include <esp_wifi.h>
+#include <time.h>
+#include "../time_manage/time_manage.h"
+#include "../data_esp32/data_esp32.h"
 
-static char uuidcid[UUID_STR_LEN] = {0};
+#define TAG "DEVICE_API"
+
+static char time_set[2];
 static char *mqttarr[2];
 
-// char *load_cert_from_spiffs(void)
-// {
-//     FILE *f = fopen("/spiffs/server.crt", "r");
-//     if (!f)
-//     {
-//         ESP_LOGE(TAG, "Cannot open certificate file");
-//         return NULL;
-//     }
+char uuid[64], key[32], server[64], user[32], pass[32];
 
-//     fseek(f, 0, SEEK_END);
-//     size_t len = ftell(f);
-//     fseek(f, 0, SEEK_SET);
+double sal;
+int ry1[4], ry2[4], ry3[4], ry4[4], pca[8];
+char device_time[32], device_exp[16];
+static char last_device_date[16] = "";
+bool en;
+bool check_time_device = false;
+bool check_reg_device = false;
+static bool already_post = false;
+bool server_connected = false;
+bool check_server_alive()
 
-//     char *buf = malloc(len + 1);
-//     if (!buf)
-//     {
-//         fclose(f);
-//         ESP_LOGE(TAG, "Cannot allocate memory for certificate");
-//         return NULL;
-//     }
-
-//     fread(buf, 1, len, f);
-//     buf[len] = '\0';
-//     fclose(f);
-//     return buf;
-// }
-
-void load_uuid_from_spiffs(void)
 {
-    FILE *f = fopen("/spiffs/uuid.txt", "r");
-    if (!f)
+    ESP_LOGI("CHECK", "Checking server alive...");
+
+    esp_http_client_config_t config = {
+        .url = "http://192.168.1.119:4000/",
+        .method = HTTP_METHOD_HEAD,
+        .timeout_ms = 3000,
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == NULL)
     {
-        ESP_LOGE(TAGUUID, "UUID file not found");
-        return;
+        ESP_LOGE("CHECK", "Failed to init HTTP client");
+        return false;
     }
 
-    fgets(uuidcid, sizeof(uuidcid), f);
-    fclose(f);
-    uuidcid[strcspn(uuidcid, "\n")] = 0;
-    ESP_LOGI(TAGUUID, "Loaded UUID: %s", uuidcid);
+    ESP_LOGI("CHECK", "Performing HTTP HEAD request...");
+    esp_err_t err = esp_http_client_perform(client);
+
+    if (err == ESP_OK)
+    {
+        int status = esp_http_client_get_status_code(client);
+        ESP_LOGI("CHECK", "Server reachable, HTTP status: %d", status);
+        esp_http_client_cleanup(client);
+        server_connected = true;
+        return true;
+    }
+    else
+    {
+        ESP_LOGW("CHECK", "Server not reachable: %s", esp_err_to_name(err));
+        esp_http_client_cleanup(client);
+        server_connected = false;
+        return false;
+    }
 }
-void send_uuid_to_postman()
+
+void post_uuid()
 {
+    load_uuid_from_spiffs();
     char post_data[128];
     snprintf(post_data, sizeof(post_data), "{\"uuid\": \"%s\"}", uuidcid);
 
     esp_http_client_config_t config = {
-        .url = "http://192.168.1.119:4000/api/v1/device",
+        .url = "http://192.168.1.119:4000/device/uuid",
         .method = HTTP_METHOD_POST,
-        // .crt_bundle_attach = esp_crt_bundle_attach, 
+        // .crt_bundle_attach = esp_crt_bundle_attach,
+        .timeout_ms = 10000,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -72,201 +85,326 @@ void send_uuid_to_postman()
 
     ESP_LOGI(TAG, "POST body: %s (len=%d)", post_data, strlen(post_data));
 
-    // 🔹 เปิด connection พร้อมระบุขนาด body
     esp_err_t err = esp_http_client_open(client, strlen(post_data));
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
         esp_http_client_cleanup(client);
         return;
     }
 
-    // 🔹 เขียน body เข้าไปเอง
     int wlen = esp_http_client_write(client, post_data, strlen(post_data));
-    if (wlen < 0) {
+    if (wlen < 0)
+    {
         ESP_LOGE(TAG, "Write failed");
         esp_http_client_cleanup(client);
         return;
     }
 
-    // 🔹 ดึง response
     esp_http_client_fetch_headers(client);
     int status = esp_http_client_get_status_code(client);
     ESP_LOGI(TAG, "HTTP POST Status = %d", status);
 
     char buffer[2048];
     int content_len = esp_http_client_read_response(client, buffer, sizeof(buffer) - 1);
-    if (content_len >= 0) {
+    if (content_len >= 0)
+    {
         buffer[content_len] = 0;
         ESP_LOGI(TAG, "Response:\n%s", buffer);
     }
 
     esp_http_client_cleanup(client);
 }
+void post_time_set()
+{
+    wifi_ap_record_t ap_info;
+    bool connect = (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
+    if (connect)
+    {
+        if (!time_correct)
+        {
+            char post_data[50];
+            snprintf(post_data, sizeof(post_data), "{\"set_t\": \"%s\"}", time_correct ? "true" : "false");
 
-// static void load_mqtt_credentials(void)
-// {
-//     FILE *f = fopen("/spiffs/settingsmqtt.txt", "r");
-//     if (!f)
-//     {
-//         ESP_LOGW(TAG, "No MQTT settings file found.");
-//         return;
-//     }
+            esp_http_client_config_t config = {
+                .url = "http://192.168.1.119:4000/device/time_set",
+                .method = HTTP_METHOD_POST,
+                // .crt_bundle_attach = esp_crt_bundle_attach,
+                .timeout_ms = 10000,
+            };
 
-//     char line[128];
-//     if (fgets(line, sizeof(line), f))
-//     {
-//         char *token = strtok(line, ",");
-//         int i = 0;
-//         while (token && i < 2)
-//         {
-//             mqttarr[i] = strdup(token);
-//             token = strtok(NULL, ",");
-//             i++;
-//         }
-//     }
-//     fclose(f);
-//     ESP_LOGI(TAG, "MQTT credentials loaded: user=%s, pass=%s", mqttarr[0], mqttarr[1]);
-// }
+            esp_http_client_handle_t client = esp_http_client_init(&config);
+            esp_http_client_set_header(client, "Content-Type", "application/json");
 
-// static void save_mqtt_credentials(const char *user, const char *pass)
-// {
-//     FILE *f = fopen("/spiffs/settingsmqtt.txt", "w");
-//     if (!f)
-//         return;
+            ESP_LOGI(TAG, "POST body: %s (len=%d)", post_data, strlen(post_data));
 
-//     fprintf(f, "%s,%s", user, pass);
-//     fclose(f);
-//     ESP_LOGI(TAG, "Saved MQTT credentials: %s / %s", user, pass);
-// }
+            esp_err_t err = esp_http_client_open(client, strlen(post_data));
+            if (err != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+                esp_http_client_cleanup(client);
+                return;
+            }
 
-// static char *build_device_json(const char *macStr,
-//                                const char *ssid,
-//                                const char *ip,
-//                                int rssi,
-//                                int versionpro,
-//                                bool boardstatus[4])
-// {
-//     cJSON *root = cJSON_CreateObject();
-//     if (!root)
-//         return NULL;
+            int wlen = esp_http_client_write(client, post_data, strlen(post_data));
+            if (wlen < 0)
+            {
+                ESP_LOGE(TAG, "Write failed");
+                esp_http_client_cleanup(client);
+                return;
+            }
 
-//     cJSON_AddStringToObject(root, "mac", macStr);
-//     cJSON_AddStringToObject(root, "cid", uuidcid);
-//     cJSON_AddStringToObject(root, "wifi", ssid);
-//     cJSON_AddStringToObject(root, "wifiip", ip);
-//     cJSON_AddNumberToObject(root, "wifiss", rssi);
-//     cJSON_AddNumberToObject(root, "v", versionpro);
+            esp_http_client_fetch_headers(client);
+            int status = esp_http_client_get_status_code(client);
+            ESP_LOGI(TAG, "HTTP POST Status = %d", status);
 
-//     cJSON *board = cJSON_CreateArray();
-//     for (int i = 0; i < 4; i++)
-//         cJSON_AddItemToArray(board, cJSON_CreateBool(boardstatus[i]));
-//     cJSON_AddItemToObject(root, "borad", board);
+            char buffer[2048];
+            int content_len = esp_http_client_read_response(client, buffer, sizeof(buffer) - 1);
+            if (content_len >= 0)
+            {
+                buffer[content_len] = 0;
+                ESP_LOGI(TAG, "Response:\n%s", buffer);
+            }
 
-//     cJSON_AddNumberToObject(root, "efhs", 0);
-//     cJSON_AddNumberToObject(root, "sfhs", 0);
+            esp_http_client_cleanup(client);
+        }
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Cant connect wifi(not post server)");
+    }
+}
+void get_device_reg()
+{
+    esp_http_client_config_t config = {
+        .url = "http://192.168.1.119:4000/device/get/reg",
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 10000,
+    };
 
-//     char *json_str = cJSON_PrintUnformatted(root);
-//     cJSON_Delete(root);
-//     return json_str;
-// }
+    esp_http_client_handle_t client = esp_http_client_init(&config);
 
-// void device_register_or_update(const char *ssid,
-//                                const char *ip,
-//                                int rssi,
-//                                int versionpro,
-//                                bool boardstatus[4])
-// {
-//     char *cert_pem = load_cert_from_spiffs();
-//     if (!cert_pem)
-//     {
-//         ESP_LOGE(TAG, "Cannot load certificate, aborting HTTP request");
-//         return;
-//     }
-//     ESP_LOGI(TAG, "Loaded cert:\n%s", cert_pem);
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+        esp_http_client_cleanup(client);
+        return;
+    }
 
-//     uint8_t mac[6];
-//     esp_read_mac(mac, ESP_MAC_WIFI_STA);
-//     char macStr[20];
-//     sprintf(macStr, "%02x:%02x:%02x:%02x:%02x:%02x",
-//             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    esp_http_client_fetch_headers(client);
 
-//     char urlcheck[200];
-//     snprintf(urlcheck, sizeof(urlcheck),
-//              "https://192.168.1.119:3500/api/v1/device?mac=%s&cid=%s",
-//              macStr, uuidcid);
+    int status = esp_http_client_get_status_code(client);
+    int content_length = esp_http_client_get_content_length(client);
+    ESP_LOGI(TAG, "HTTP Status = %d, content_length = %d", status, content_length);
 
-//     esp_http_client_config_t cfg_get = {
-//         .url = urlcheck,
-//         .cert_pem = cert_pem,
+    int buf_len = (content_length > 0 && content_length < 4096) ? content_length + 1 : 4096;
+    char *buffer = malloc(buf_len);
+    if (!buffer)
+    {
+        ESP_LOGE(TAG, "Failed to allocate buffer");
+        esp_http_client_cleanup(client);
+        return;
+    }
 
-//     };
-//     esp_log_level_set("esp-tls", ESP_LOG_DEBUG);
-//     esp_log_level_set("esp-tls-mbedtls", ESP_LOG_DEBUG);
+    int len = esp_http_client_read_response(client, buffer, buf_len - 1);
+    if (len >= 0)
+    {
+        buffer[len] = '\0';
+        ESP_LOGI(TAG, "Response body: %s", buffer);
 
-//     esp_http_client_handle_t client = esp_http_client_init(&cfg_get);
-//     esp_http_client_set_method(client, HTTP_METHOD_GET);
+        cJSON *root = cJSON_Parse(buffer);
+        if (root)
+        {
+            cJSON *id = cJSON_GetObjectItem(root, "id");
+            cJSON *m = cJSON_GetObjectItem(root, "m");
 
-//     esp_err_t err = esp_http_client_open(client, 0);
-//     int status = -1;
-//     if (err == ESP_OK)
-//     {
-//         esp_http_client_fetch_headers(client);
-//         status = esp_http_client_get_status_code(client);
-//     }
-//     esp_http_client_cleanup(client);
+            if (id && m)
+            {
+                cJSON *u = cJSON_GetObjectItem(id, "u");
+                cJSON *k = cJSON_GetObjectItem(id, "k");
+                cJSON *s = cJSON_GetObjectItem(m, "s");
+                cJSON *un = cJSON_GetObjectItem(m, "un");
+                cJSON *pw = cJSON_GetObjectItem(m, "pw");
 
-//     char *json_data = build_device_json(macStr, ssid, ip, rssi, versionpro, boardstatus);
-//     if (!json_data)
-//     {
-//         free(cert_pem);
-//         return;
-//     }
+                if (u && k && s && un && pw)
+                {
+                    strncpy(uuid, u->valuestring, sizeof(uuid) - 1);
+                    uuid[sizeof(uuid) - 1] = '\0';
 
-//     const char *method = (status == 200) ? "PUT" : "POST";
-//     ESP_LOGI(TAG, "Device %s (%s)", (status == 200) ? "found, updating" : "not found, registering", method);
+                    strncpy(key, k->valuestring, sizeof(key) - 1);
+                    key[sizeof(key) - 1] = '\0';
 
-//     esp_http_client_config_t cfg_post = {
-//         .url = "https://192.168.1.119:3500/api/v1/device",
-//         .cert_pem = cert_pem,
+                    strncpy(server, s->valuestring, sizeof(server) - 1);
+                    server[sizeof(server) - 1] = '\0';
 
-//     };
-//     client = esp_http_client_init(&cfg_post);
-//     esp_http_client_set_method(client, (status == 200) ? HTTP_METHOD_PUT : HTTP_METHOD_POST);
-//     esp_http_client_set_header(client, "Content-Type", "application/json");
-//     esp_http_client_set_post_field(client, json_data, strlen(json_data));
+                    strncpy(user, un->valuestring, sizeof(user) - 1);
+                    user[sizeof(user) - 1] = '\0';
 
-//     err = esp_http_client_perform(client);
-//     if (err == ESP_OK)
-//     {
-//         int resp_status = esp_http_client_get_status_code(client);
-//         ESP_LOGI(TAG, "HTTP %s status = %d", method, resp_status);
+                    strncpy(pass, pw->valuestring, sizeof(pass) - 1);
+                    pass[sizeof(pass) - 1] = '\0';
 
-//         if (resp_status == 200 || resp_status == 201)
-//         {
-//             int len = esp_http_client_get_content_length(client);
-//             char *resp_buf = malloc(len + 1);
-//             if (resp_buf)
-//             {
-//                 esp_http_client_read_response(client, resp_buf, len);
-//                 resp_buf[len] = '\0';
+                    ESP_LOGI(TAG, "UUID: %s", uuid);
+                    ESP_LOGI(TAG, "Key: %s", key);
+                    ESP_LOGI(TAG, "MQTT Server: %s", server);
+                    ESP_LOGI(TAG, "MQTT User: %s", user);
+                    ESP_LOGI(TAG, "MQTT Pass: %s", pass);
+                }
+            }
+            cJSON_Delete(root);
+        }
+    }
 
-//                 cJSON *root = cJSON_Parse(resp_buf);
-//                 cJSON *data = cJSON_GetObjectItem(root, "data");
-//                 if (data)
-//                 {
-//                     const char *user = cJSON_GetObjectItem(data, "username")->valuestring;
-//                     const char *pass = cJSON_GetObjectItem(data, "clientid")->valuestring;
-//                     save_mqtt_credentials(user, pass);
-//                 }
-//                 cJSON_Delete(root);
-//                 free(resp_buf);
-//             }
-//         }
-//     }
+    free(buffer);
+    esp_http_client_cleanup(client);
+    check_reg_device=true;
+}
 
-//     esp_http_client_cleanup(client);
-//     free(json_data);
-//     free(cert_pem);
+void get_device_data()
+{
+    esp_http_client_config_t config = {
+        .url = "http://192.168.1.119:4000/device/get/data",
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 10000,
+    };
 
-//     load_mqtt_credentials();
-// }
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+        esp_http_client_cleanup(client);
+        return;
+    }
+
+    esp_http_client_fetch_headers(client);
+    int status = esp_http_client_get_status_code(client);
+    int content_length = esp_http_client_get_content_length(client);
+    ESP_LOGI(TAG, "HTTP Status = %d, content_length = %d", status, content_length);
+
+    int buf_len = (content_length > 0 && content_length < 4096) ? content_length + 1 : 4096;
+    char *buffer = malloc(buf_len);
+    if (!buffer)
+    {
+        ESP_LOGE(TAG, "Malloc failed!");
+        esp_http_client_cleanup(client);
+        return;
+    }
+
+    int read_len = esp_http_client_read_response(client, buffer, buf_len - 1);
+    if (read_len >= 0)
+    {
+        buffer[read_len] = '\0';
+        ESP_LOGI(TAG, "Response body: %s", buffer);
+
+        cJSON *root = cJSON_Parse(buffer);
+        if (root)
+        {
+            cJSON *s = cJSON_GetObjectItem(root, "s");
+            if (s)
+                sal = cJSON_GetObjectItem(s, "sa")->valuedouble;
+
+            cJSON *r = cJSON_GetObjectItem(root, "r");
+            if (r)
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    ry1[i] = cJSON_GetArrayItem(cJSON_GetObjectItem(r, "ry1"), i)->valueint;
+                    ry2[i] = cJSON_GetArrayItem(cJSON_GetObjectItem(r, "ry2"), i)->valueint;
+                    ry3[i] = cJSON_GetArrayItem(cJSON_GetObjectItem(r, "ry3"), i)->valueint;
+                    ry4[i] = cJSON_GetArrayItem(cJSON_GetObjectItem(r, "ry4"), i)->valueint;
+                }
+                for (int i = 0; i < 8; i++)
+                {
+                    cJSON *item = cJSON_GetArrayItem(cJSON_GetObjectItem(r, "p"), i);
+                    if (item)
+                        pca[i] = item->valueint;
+                }
+            }
+
+            strncpy(device_time, cJSON_GetObjectItem(root, "t")->valuestring, sizeof(device_time) - 1);
+            strncpy(device_exp, cJSON_GetObjectItem(root, "exp")->valuestring, sizeof(device_exp) - 1);
+            en = cJSON_IsTrue(cJSON_GetObjectItem(root, "en"));
+
+            ESP_LOGI(TAG, "Salinity: %.2f", sal);
+            ESP_LOGI(TAG, "Ry1: [%d,%d,%d,%d]", ry1[0], ry1[1], ry1[2], ry1[3]);
+            ESP_LOGI(TAG, "Ry2: [%d,%d,%d,%d]", ry2[0], ry2[1], ry2[2], ry2[3]);
+            ESP_LOGI(TAG, "Ry3: [%d,%d,%d,%d]", ry3[0], ry3[1], ry3[2], ry3[3]);
+            ESP_LOGI(TAG, "Ry4: [%d,%d,%d,%d]", ry4[0], ry4[1], ry4[2], ry4[3]);
+            ESP_LOGI(TAG, "PCA: [%d,%d,%d,%d,%d,%d,%d,%d]",
+                     pca[0], pca[1], pca[2], pca[3], pca[4], pca[5], pca[6], pca[7]);
+            ESP_LOGI(TAG, "Time: %s", device_time);
+            ESP_LOGI(TAG, "Exp: %s", device_exp);
+            ESP_LOGI(TAG, "Enable: %s", en ? "true" : "false");
+
+            cJSON_Delete(root);
+        }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Failed to read response");
+    }
+
+    free(buffer);
+    esp_http_client_cleanup(client);
+    check_time_device = true;
+}
+
+void http_task()
+{
+    wifi_ap_record_t ap_info;
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    while (1)
+    {
+        bool connect = (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
+        // if connect run task else if disconnect dont send anythings
+        if (connect)
+        {
+            // if sever alive run task else if server dead dont send anythings
+            if (check_server_alive())
+            {
+                if (!already_post)
+                {
+                    post_uuid();
+                    get_device_reg();
+                    get_device_data();
+                    strncpy(last_device_date, device_time + 8, 2); // 2025-09-04T10:30:00Z --> 04
+                    last_device_date[2] = '\0';
+                    already_post = true;
+                }
+                else
+                {
+                    while (!already_check_time) // waiting ds1307 set time
+                    {
+                        ESP_LOGW(TAG, "Waitind time device");
+                        vTaskDelay(pdMS_TO_TICKS(5000));
+                    }
+                    /*send data from server everyday*/
+                    if (strcmp(date_ds1307, last_device_date) != 0) // (current date) check with (last device date) if same return 1;
+                    {
+                        ESP_LOGI(TAG, "New day: %s → %s", last_device_date, date_ds1307);
+                        get_device_data();
+                        strncpy(last_device_date, date_ds1307, sizeof(last_device_date) - 1);
+                    }
+                    else
+                    {
+                        ESP_LOGI(TAG, "Already fetched data today (%s)", date_ds1307);
+                    }
+                    ESP_LOGI(TAG, "Already Post");
+                }
+            }
+            else
+            {
+                ESP_LOGW(TAG, "Cant post http(disconnect server)");
+                already_post = false;
+            }
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Cant post http(disconnect wifi)");
+            already_post = false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}

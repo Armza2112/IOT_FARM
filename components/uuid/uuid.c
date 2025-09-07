@@ -4,7 +4,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_random.h"
-char uuidcid[UUID_STR_LEN];
+static char uuidcid[UUID_STR_LEN];
 void uuid_generate(uuid_t out)
 {
     esp_fill_random(out, sizeof(uuid_t));

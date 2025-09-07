@@ -8,6 +8,7 @@
 #include "../oled/oled_manage.h"
 #include "../pca9557_manage/pca9557_manage.h"
 #include "../button_manage/button_manage.h"
+#include "../device_api/device_api.h"
 
 #define I2C_MASTER_SCL_IO 22
 #define I2C_MASTER_SDA_IO 21
@@ -92,13 +93,13 @@ void i2c_main_task()
     int counter = 0;
     oled_init();
     draw_startup();
-    vTaskDelay(pdMS_TO_TICKS(4000));
     release_task_i2c();
-    sntp_ds1307_task();
     ESP_ERROR_CHECK(pca9557_init_once());
     release_task_i2c();
+    vTaskDelay(pdMS_TO_TICKS(4000));
     while (1)
     {
+        safe_i2c_action(ds1307_task);
         blink_state = !blink_state;
         if (show_wifi_screen)
         {
@@ -110,18 +111,14 @@ void i2c_main_task()
             safe_i2c_action(draw_main_screen);
             ESP_LOGI("I2C_FLAG", "After draw_main_screen: i2c_busy=%s", i2c_busy ? "true" : "false");
         }
-
         safe_i2c_action(ds1307_get_time);
         ESP_LOGI("I2C_FLAG", "After ds1307_get_time: i2c_busy=%s", i2c_busy ? "true" : "false");
-
-        vTaskDelay(pdMS_TO_TICKS(1000));
 
         if (counter % 60 == 0)
         {
             safe_i2c_action(pca9557_task);
             ESP_LOGI("I2C_FLAG", "After pca9557_task: i2c_busy=%s", i2c_busy ? "true" : "false");
         }
-
         counter++;
     }
 }

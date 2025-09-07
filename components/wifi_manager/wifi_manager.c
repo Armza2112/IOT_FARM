@@ -27,6 +27,7 @@
 
 void wifi_connect(const char *ssid, const char *password);
 void wifi_scan_task(void *pvParameters);
+void wifi_reconnect_task();
 
 wifi_ap_record_t scanned_aps[MAXIMUM_AP];
 int16_t scanned_ap_count = 0;
@@ -67,7 +68,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             ESP_LOGE("WIFI", "STA disconnected, reason: %d", disc->reason);
             xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
             xEventGroupSetBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
-            stop_sntp();
             if (user_disconnect)
             {
                 ESP_LOGI("WIFI", "User disconnect");
@@ -88,25 +88,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 esp_wifi_start();
                 vTaskDelay(pdMS_TO_TICKS(1000));
             }
-            else
+            else // lost connect wifi condition
             {
-                char ssid[33] = {0}, password[65] = {0};
-                size_t ssid_len = sizeof(ssid), pass_len = sizeof(password);
-                nvs_handle_t nvs_handle;
-                if (nvs_open("wifi_creds", NVS_READONLY, &nvs_handle) == ESP_OK)
-                {
-                    if (nvs_get_str(nvs_handle, "ssid", ssid, &ssid_len) == ESP_OK &&
-                        nvs_get_str(nvs_handle, "password", password, &pass_len) == ESP_OK)
-                    {
-                        wifi_config_t wifi_config = {};
-                        strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
-                        strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
-                        esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
-                        esp_wifi_connect();
-                        ESP_LOGI("WIFI", "Reconnecting to saved SSID: %s", ssid);
-                    }
-                    nvs_close(nvs_handle);
-                }
+                ESP_LOGW("WIFI", "WiFi lost, starting reconnect task");
+                xTaskCreate(wifi_reconnect_task, "wifi_reconnect_task", 4096, NULL, 5, NULL);
             }
             break;
         }
@@ -119,9 +104,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
             ESP_LOGI("WIFI", "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
             xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
-            initialize_sntp();
             xTaskCreate(stop_server_task, "stop_server_task", 4096, NULL, 5, NULL); // stop web_server delay(10000)
-            show_wifi_screen = false; // OLED flag
+            show_wifi_screen = false;                                               // OLED flag
         }
     }
 }
@@ -348,4 +332,30 @@ void connect_wifi_nvs()
         ESP_LOGI(TAG_SCAN, "Current Wi-Fi mode: %d", mode);
         ESP_LOGI(TAG_AP, "Cannot open NVS");
     }
+}
+void wifi_reconnect_task()
+{
+    char ssid[33] = {0}, password[65] = {0};
+    size_t ssid_len = sizeof(ssid), pass_len = sizeof(password);
+    nvs_handle_t nvs_handle;
+
+    while (1)
+    {
+        if (nvs_open("wifi_creds", NVS_READONLY, &nvs_handle) == ESP_OK)
+        {
+            if (nvs_get_str(nvs_handle, "ssid", ssid, &ssid_len) == ESP_OK &&
+                nvs_get_str(nvs_handle, "password", password, &pass_len) == ESP_OK)
+            {
+                wifi_config_t wifi_config = {};
+                strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
+                strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
+                esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+                esp_wifi_connect();
+                ESP_LOGI("WIFI", "Reconnecting to saved SSID: %s", ssid);
+            }
+            nvs_close(nvs_handle);
+        }
+        vTaskDelay(pdMS_TO_TICKS(60000));
+    }
+    vTaskDelete(NULL);
 }

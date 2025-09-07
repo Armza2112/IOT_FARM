@@ -72,6 +72,9 @@
         </div>
     </div>
     <div>
+        <button id="refreshBtn" style="border-radius: 5px; outline: none; border: none; box-shadow: none; background-color: #2F2F2F; color:#9B9B9B; width:70px; height:30px; font-family:'detailfont'; font-weight: bold;font-size:14px;">Wifi scan</button>
+    </div>
+    <div>
         <form method="POST" style="text-align: center;" id="wifiFORM">
         <select id="ssidSELECT" name="ssid" class="input__box">
             %OPTIONS%
@@ -95,6 +98,7 @@
             document.getElementById('wifiSSID').textContent = "Connected to: "+ssid;
             document.getElementById('wifiRSSI').textContent = "Level Signal: " + rrsi + "dbm";
             select.innerHTML = `<option value="${ssid}" selected>${ssid}</option>`;
+            document.getElementById('pass').placeholder = "***************";
             select.disabled = true;
             select.parentNode.appendChild(hidden);
             hidden.type = "hidden";
@@ -141,6 +145,9 @@
         }
     }
 });
+    document.getElementById("refreshBtn").addEventListener("click", () => {
+        window.location.reload();
+    });
     </script>
 </body>
 </html>

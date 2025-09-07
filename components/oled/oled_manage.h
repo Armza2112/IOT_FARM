@@ -9,4 +9,5 @@ void draw_startup();
 void draw_main_screen();
 
 extern bool blink_state;
+
 #endif

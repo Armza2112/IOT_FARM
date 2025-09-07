@@ -1,7 +1,9 @@
 #include "esp_wifi.h"
 #include <stdio.h>
 #include <string.h>
-
+#include "../uuid/uuid.h"
+#include "esp_log.h"
+char uuidcid[37] = {0};
 esp_err_t get_sta_mac(char *mac_str, size_t len)
 {
     if (!mac_str || len < 18)
@@ -35,4 +37,22 @@ esp_err_t get_sta_rssi(int *rssi, char *rssi_str, size_t str_len)
     *rssi = ap_info.rssi;
     snprintf(rssi_str, str_len, "%d", *rssi);
     return ESP_OK;
+}
+void load_uuid_from_spiffs()
+{
+    FILE *f = fopen("/spiffs/uuid.txt", "r");
+    if (!f)
+    {
+        ESP_LOGE("UUID", "UUID file not found");
+        return;
+    }
+
+    fgets(uuidcid, sizeof(uuidcid), f);
+    fclose(f);
+    uuidcid[strcspn(uuidcid, "\n")] = 0;
+    ESP_LOGI("UUID", "Loaded UUID: %s", uuidcid);
+}
+void load_data_task(){
+    initsettingsuuid();
+    load_uuid_from_spiffs();
 }

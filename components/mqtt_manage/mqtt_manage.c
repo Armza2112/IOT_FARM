@@ -12,28 +12,37 @@
 #include "../ryr404a_manage/ryr404a_manage.h"
 #include "../pca9557_manage/pca9557_manage.h"
 #include "../i2c_manage/i2c_manage.h"
+#include "../device_api/device_api.h"
 #include <math.h>
-bool mqtt_connected = false; // flag mqtt connect
 
-static const char *TAG_MQTT = "MQTT";
-void mqtt_task();
+bool mqtt_connected = false; // flag mqtt connect
+static const char *TAG = "MQTT";
 // function
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
 void mqtt_ryr404a_callback(const char *topic, const char *payload);
 void mqtt_pca9557_callback(const char *topic, const char *payload);
 void mqtt_reconnect_task();
+void mqtt_task();
 
 // declare var
+
 esp_mqtt_client_handle_t mqtt_client = NULL;
 
 void mqtt_init()
 {
-    wifi_event_group = xEventGroupCreate();
+    // wifi_event_group = xEventGroupCreate();
     xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
 
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = "mqtt://broker.hivemq.com",
+        .network.disable_auto_reconnect = false,
     };
+    // esp_mqtt_client_config_t mqtt_cfg = {
+    //     .uri = "mqtt://mqtt.api.com",
+    //     .username = user,
+    //     .password = pass,
+    //     .port = 1883,
+    // };
     mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(mqtt_client);
@@ -45,17 +54,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch (event_id)
     {
     case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG_MQTT, "MQTT Connected");
+        ESP_LOGI(TAG, "MQTT Connected");
         mqtt_connected = true;
         esp_mqtt_client_subscribe(event->client, "device/controls/#", 2);
+        mqtt_spiffs();
         break;
     case MQTT_EVENT_DISCONNECTED:
         mqtt_connected = false;
-        ESP_LOGI(TAG_MQTT, "MQTT Disconnected");
-        xTaskCreate(mqtt_reconnect_task, "mqtt_reconnect_task", 1024, NULL, 5, NULL);
+        ESP_LOGI(TAG, "MQTT Disconnected");
         break;
     case MQTT_EVENT_PUBLISHED:
-        ESP_LOGI(TAG_MQTT, "Message published (msg_id=%d)", event->msg_id);
+        ESP_LOGI(TAG, "Message published (msg_id=%d)", event->msg_id);
         break;
     case MQTT_EVENT_DATA:
     {
@@ -79,7 +88,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         }
         else if (strcmp(topic, "device/controls/pca9557") == 0)
         {
-          
             while (i2c_busy)
             {
                 vTaskDelay(pdMS_TO_TICKS(5));
@@ -95,69 +103,98 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     }
     default:
-        ESP_LOGI(TAG_MQTT, "Other MQTT event id:%ld", (long)event_id);
+        ESP_LOGI(TAG, "Other MQTT event id:%ld", (long)event_id);
         break;
-    }
-}
-void mqtt_reconnect_task()
-{
-    while (1)
-    {
-        if (!mqtt_connected && mqtt_client != NULL)
-        {
-            ESP_LOGW("MQTT", "Force restart MQTT client...");
-            esp_mqtt_client_stop(mqtt_client);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            esp_mqtt_client_start(mqtt_client);
-        }
-        vTaskDelay(pdMS_TO_TICKS(60000));
     }
 }
 
 // do7019
-void mqtt_publish_task(void *pvParameters)
+void save_to_spiffs(const char *payload)
+{
+    FILE *f = fopen("/spiffs/unsend.txt", "a");
+    if (f == NULL)
+    {
+        ESP_LOGE("SPIFFS", "Failed to open unsent.txt for appending");
+        return;
+    }
+    if (fprintf(f, "%s\n", payload) < 0)
+    {
+        ESP_LOGE("SPIFFS", "Failed to write payload to unsent.txt");
+    }
+    else
+    {
+        ESP_LOGI("SPIFFS", "Saved payload to unsent.txt: %s", payload);
+    }
+
+    fclose(f);
+}
+bool mqtt_safe_publish(const char *topic, const char *payload)
+{
+    wifi_ap_record_t ap_info;
+    bool connect = (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
+    bool server_ok = check_server_alive();
+
+    if (connect && server_ok && mqtt_connected)
+    {
+        int msg_id = esp_mqtt_client_publish(mqtt_client,
+                                             topic,
+                                             payload,
+                                             0, 1, 1);
+
+        if (msg_id == -1)
+        {
+            ESP_LOGW("MQTT", "Publish failed, saving to SPIFFS: %s", payload);
+            save_to_spiffs(payload);
+            return false;
+        }
+
+        ESP_LOGI("MQTT", "Publish queued msg_id=%d", msg_id);
+        return true;
+    }
+    else
+    {
+        ESP_LOGW("MQTT", "No connection (wifi/server/mqtt), saving to SPIFFS: %s", payload);
+        save_to_spiffs(payload);
+        return false;
+    }
+}
+
+void mqtt_publish_task()
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
-    while (1)
+    int last_index = (history_index - 1 + HISTORY_SIZE) % HISTORY_SIZE;
+
+    if (!isnan(oxygen_history[last_index]) &&
+        !isnan(temp_history[last_index]))
     {
-        int last_index = (history_index - 1 + HISTORY_SIZE) % HISTORY_SIZE;
+        char payload[200];
+        int len = snprintf(payload, sizeof(payload),
+                           "{\"time\":\"%s\","
+                           "\"temperature\":%.2f,"
+                           "\"oxygen\":%.2f,"
+                           "\"salinity\":%.2f,"
+                           "\"do\":%.2f}",
+                           time_history[last_index],
+                           temp_history[last_index],
+                           oxygen_history[last_index],
+                           salinity_history[last_index],
+                           do_history[last_index]);
 
-        if (!isnan(oxygen_history[last_index]) &&
-            !isnan(temp_history[last_index]))
+        if (len > 0)
         {
-            char payload[200];
-            int len = snprintf(payload, sizeof(payload),
-                               "{\"time\":\"%s\","
-                               "\"temperature\":%.2f,"
-                               "\"oxygen\":%.2f,"
-                               "\"salinity\":%.2f,"
-                               "\"do\":%.2f}",
-                               time_history[last_index],
-                               temp_history[last_index],
-                               oxygen_history[last_index],
-                               salinity_history[last_index],
-                               do_history[last_index]);
-
-            if (len > 0)
-            {
-                ESP_LOGI(TAG_MQTT, "Published payload: %s", payload);
-                esp_mqtt_client_publish(mqtt_client,
-                                        "device/sensor/received",
-                                        payload, 0, 1, 1);
-            }
+            ESP_LOGI(TAG, "Published payload: %s", payload);
+            mqtt_safe_publish("device/sensor/received", payload);
         }
-        else
-        {
-            ESP_LOGW("MQTT", "No valid data to publish");
-        }
-
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(60000));
+    }
+    else
+    {
+        ESP_LOGW("MQTT", "No valid data to publish");
     }
 }
-void mqtt_spiffs(void *pvParameters)
+void mqtt_spiffs()
 {
-    FILE *f = fopen("/spiffs/do7019.txt", "r");
+    FILE *f = fopen("/spiffs/unsend.txt", "r");
     if (!f)
     {
         ESP_LOGE("MQTT", "Failed to open file");
@@ -219,37 +256,27 @@ void mqtt_spiffs(void *pvParameters)
 
     fclose(f);
     ESP_LOGI("MQTT", "Finished sending history");
-    vTaskDelete(NULL);
 }
-
 // do7019
 // RYR404A
-void mqtt_publish_ryr404a_task(void *pvParameters)
+void mqtt_publish_ryr404a_task()
 {
-    while (!mqtt_connected)
-    {
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
     char topic[64];
     char payload[128];
-    while (1)
+
+    for (size_t b = 0; b < RYR_NUM_BOARDS; ++b)
     {
-        for (size_t b = 0; b < RYR_NUM_BOARDS; ++b)
+        snprintf(topic, sizeof(topic), "device/relay/ryr404a/%u", (unsigned)(b + 1));
+        int len = snprintf(payload, sizeof(payload),
+                           "{\"board\":%u,\"ch\":[%u,%u,%u,%u]}",
+                           (unsigned)(b + 1),
+                           relay[b][0], relay[b][1], relay[b][2], relay[b][3]);
+
+        if (len > 0 && mqtt_connected)
         {
-            snprintf(topic, sizeof(topic), "device/relay/ryr404a/%u", (unsigned)(b + 1));
-            int len = snprintf(payload, sizeof(payload),
-                               "{\"board\":%u,\"ch\":[%u,%u,%u,%u]}",
-                               (unsigned)(b + 1),
-                               relay[b][0], relay[b][1], relay[b][2], relay[b][3]);
-
-            if (len > 0 && mqtt_connected)
-            {
-                esp_mqtt_client_publish(mqtt_client, topic, payload, len, 1, 1);
-                ESP_LOGI("MQTT", "Send to MQTT");
-            }
+            esp_mqtt_client_publish(mqtt_client, topic, payload, len, 1, 1);
+            ESP_LOGI("MQTT", "Send to MQTT");
         }
-
-        vTaskDelay(pdMS_TO_TICKS(60000));
     }
 }
 void mqtt_ryr404a_callback(const char *topic, const char *payload) // {"board":1,"ch":[0,1,0,1]}
@@ -283,47 +310,36 @@ void mqtt_ryr404a_callback(const char *topic, const char *payload) // {"board":1
             mask |= (1 << i);
         }
     }
-
     ESP_LOGI("MQTT", "SlaveID=0x%02X, Mask=0x%02X", slave_id, mask);
-
     ESP_ERROR_CHECK(ryr_write_mask_board(slave_id, mask)); // function ryr404a_manage
     ryr404a_to_spiffs();                                   // function save to spiffs ryr404a_manage
+    mqtt_publish_ryr404a_task();
     cJSON_Delete(root);
 }
 // RYR404A
 // pca9557
-void mqtt_publish_pca9557_task(void *pvParameters)
+void mqtt_publish_pca9557_task()
 {
-    while (!mqtt_connected)
-    {
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-
     char topic[64];
     char payload[128];
 
-    while (1)
+    snprintf(topic, sizeof(topic), "device/relay/pca9557");
+
+    int len = snprintf(payload, sizeof(payload),
+                       "{\"ch\":[%u,%u,%u,%u,%u,%u,%u,%u]}",
+                       relay_state[0],
+                       relay_state[1],
+                       relay_state[2],
+                       relay_state[3],
+                       relay_state[4],
+                       relay_state[5],
+                       relay_state[6],
+                       relay_state[7]);
+
+    if (len > 0 && mqtt_connected)
     {
-        snprintf(topic, sizeof(topic), "device/relay/pca9557");
-
-        int len = snprintf(payload, sizeof(payload),
-                           "{\"ch\":[%u,%u,%u,%u,%u,%u,%u,%u]}",
-                           relay_state[0],
-                           relay_state[1],
-                           relay_state[2],
-                           relay_state[3],
-                           relay_state[4],
-                           relay_state[5],
-                           relay_state[6],
-                           relay_state[7]);
-
-        if (len > 0 && mqtt_connected)
-        {
-            esp_mqtt_client_publish(mqtt_client, topic, payload, len, 1, 1);
-            ESP_LOGI("MQTT", "Publish Relay State: %s", payload);
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(60000));
+        esp_mqtt_client_publish(mqtt_client, topic, payload, len, 1, 1);
+        ESP_LOGI("MQTT", "Publish Relay State: %s", payload);
     }
 }
 void mqtt_pca9557_callback(const char *topic, const char *payload) //{"mask":15}
@@ -350,23 +366,21 @@ void mqtt_pca9557_callback(const char *topic, const char *payload) //{"mask":15}
     relay_set_mask(mask); // function pca9557_manage
     cJSON_Delete(root);
     pca9557_spiffs(); // funtion save to spiffs pca9557_manage
-
-    vTaskDelay(pdMS_TO_TICKS(500));
+    mqtt_publish_pca9557_task();
 }
-void mqtt_task()
+void mqtt_task(void *pvParameters)
 {
-    while (!mqtt_connected)
+    ESP_LOGI(TAG, "MQTT Main Task start");
+    while (!check_reg_device)
     {
-        ESP_LOGI("MQTT", "Waiting for MQTT connection...");
+        ESP_LOGW(TAG, "MQTT waiting reg data");
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
-
-    ESP_LOGI("MQTT", "Starting MQTT publish tasks...");
-
-    xTaskCreate(mqtt_spiffs, "mqtt_spiffs", 8192, NULL, 5, NULL);
-    xTaskCreate(mqtt_publish_ryr404a_task, "mqtt_publish_ryr404a_task", 4096, NULL, 5, NULL);
-    xTaskCreate(mqtt_publish_pca9557_task, "mqtt_publish_pca9557_task", 4096, NULL, 5, NULL);
-    xTaskCreate(mqtt_publish_task, "mqtt_publish_task", 4096, NULL, 5, NULL);
-
-    vTaskDelete(NULL);
+    ESP_LOGI(TAG, "MQTT recived reg data");
+    mqtt_init();
+    while (1)
+    {
+        mqtt_publish_task();
+        vTaskDelay(pdMS_TO_TICKS(60000));
+    }
 }

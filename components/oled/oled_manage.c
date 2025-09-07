@@ -17,13 +17,14 @@
 #include "../i2c_manage/i2c_manage.h"
 #include "../mqtt_manage/mqtt_manage.h"
 #include "../pca9557_manage/pca9557_manage.h"
+#include "../device_api/device_api.h"
+
 #define PIN_SDA 21
 #define PIN_SCL 22
 
 // Flags
 bool blink_state = false;
 bool send_data = false;
-bool server_connected = false;
 bool error_message = true;
 
 // OLED
