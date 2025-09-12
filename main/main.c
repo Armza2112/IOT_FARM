@@ -16,7 +16,7 @@
 #include "../ryr404a_manage/ryr404a_manage.h"
 #include "../do7019_manage/do7019_manage.h"
 #include "../data_esp32/data_esp32.h"
-
+#include <dirent.h>
 void init_spiffs()
 {
     esp_vfs_spiffs_conf_t conf = {
@@ -38,6 +38,20 @@ void init_spiffs()
 void app_main(void)
 {
     init_spiffs();
+    DIR *dir;
+    struct dirent *ent;
+    if ((dir = opendir("/spiffs")) != NULL)
+    {
+        while ((ent = readdir(dir)) != NULL)
+        {
+            ESP_LOGI("SPIFFS", "Found file: %s", ent->d_name);
+        }
+        closedir(dir);
+    }
+    else
+    {
+        ESP_LOGE("SPIFFS", "Failed to open /spiffs");
+    }
     load_data_task();
     ESP_ERROR_CHECK(modbus_master_init());
     button_task();
@@ -45,7 +59,7 @@ void app_main(void)
     connect_wifi_nvs();
     i2c_master_init();
     mutex_init();
-    xTaskCreate(mqtt_task, "mqtt_task", 21504, NULL, 5, NULL);
+    xTaskCreate(mqtt_task, "mqtt_task", 30000, NULL, 5, NULL);
     xTaskCreate(http_task, "http_task", 8192, NULL, 5, NULL);
     xTaskCreate(ryr404a_task, "ryr404a_task", 4096, NULL, 5, NULL);
     xTaskCreate(i2c_main_task, "i2c_main_task", 8192, NULL, 5, NULL);

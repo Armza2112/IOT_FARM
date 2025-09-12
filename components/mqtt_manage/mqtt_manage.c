@@ -16,13 +16,14 @@
 #include <math.h>
 
 bool mqtt_connected = false; // flag mqtt connect
+bool send_data = false;      // flag send data mqtt to oled
 static const char *TAG = "MQTT";
 // function
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
 void mqtt_ryr404a_callback(const char *topic, const char *payload);
 void mqtt_pca9557_callback(const char *topic, const char *payload);
-void mqtt_reconnect_task();
 void mqtt_task();
+void mqtt_spiffs();
 
 // declare var
 
@@ -34,15 +35,12 @@ void mqtt_init()
     xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
 
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = "mqtt://broker.hivemq.com",
+        .broker.address.uri = server,
+        .credentials.username = user,
+        .credentials.authentication.password = pass,
+        //     .port = 1883,
         .network.disable_auto_reconnect = false,
     };
-    // esp_mqtt_client_config_t mqtt_cfg = {
-    //     .uri = "mqtt://mqtt.api.com",
-    //     .username = user,
-    //     .password = pass,
-    //     .port = 1883,
-    // };
     mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(mqtt_client);
@@ -56,8 +54,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT Connected");
         mqtt_connected = true;
-        esp_mqtt_client_subscribe(event->client, "device/controls/#", 2);
-        mqtt_spiffs();
+        // iotlf/key/relay/controls
+        char topic_controls[64];
+        snprintf(topic_controls, sizeof(topic_controls), "iotlf/%s/relay/controls/#", key);
+        esp_mqtt_client_subscribe(event->client, topic_controls, 2);
+        xTaskCreate(mqtt_spiffs, "mqtt_spiffs", 16384, NULL, 5, NULL);
         break;
     case MQTT_EVENT_DISCONNECTED:
         mqtt_connected = false;
@@ -81,12 +82,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
         ESP_LOGI("MQTT", "TOPIC=%s", topic);
         ESP_LOGI("MQTT", "DATA=%s", payload);
-
-        if (strcmp(topic, "device/controls/ryr404a") == 0)
+        char topic_ryr[64]; // topic for ryr + key
+        snprintf(topic_ryr, sizeof(topic_ryr), "iotlf/%s/relay/controls/ryr404a", key);
+        char topic_pca[64]; // topic for pca+key
+        snprintf(topic_pca, sizeof(topic_pca), "iotlf/%s/relay/controls/pca9557", key);
+        if (strcmp(topic, topic_ryr) == 0) // check between topic recived and topic controls isn't match?
         {
             mqtt_ryr404a_callback(topic, payload);
         }
-        else if (strcmp(topic, "device/controls/pca9557") == 0)
+        else if (strcmp(topic, topic_pca) == 0)
         {
             while (i2c_busy)
             {
@@ -97,7 +101,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             release_task_i2c();
             i2c_busy = false;
         }
-
         free(payload);
         free(topic);
         break;
@@ -109,7 +112,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 }
 
 // do7019
-void save_to_spiffs(const char *payload)
+void save_to_spiffs(const char *payload) // test!!!
 {
     FILE *f = fopen("/spiffs/unsend.txt", "a");
     if (f == NULL)
@@ -128,26 +131,36 @@ void save_to_spiffs(const char *payload)
 
     fclose(f);
 }
-bool mqtt_safe_publish(const char *topic, const char *payload)
+bool mqtt_safe_publish(const char *payload) // test
 {
     wifi_ap_record_t ap_info;
     bool connect = (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
     bool server_ok = check_server_alive();
-
+    // iotlf/key/sensor/rt
+    char topic_sensor[64]; // topic for sensor
+    int msg_id = -1;
+    snprintf(topic_sensor, sizeof(topic_sensor), "iotlf/%s/sensor/rt", key);
     if (connect && server_ok && mqtt_connected)
     {
-        int msg_id = esp_mqtt_client_publish(mqtt_client,
-                                             topic,
+        if (en)
+        {
+            msg_id = esp_mqtt_client_publish(mqtt_client,
+                                             topic_sensor,
                                              payload,
                                              0, 1, 1);
-
+            send_data = true;
+        }
+        else
+        {
+            send_data = false;
+            ESP_LOGW(TAG, "Server not allow");
+        }
         if (msg_id == -1)
         {
             ESP_LOGW("MQTT", "Publish failed, saving to SPIFFS: %s", payload);
             save_to_spiffs(payload);
             return false;
         }
-
         ESP_LOGI("MQTT", "Publish queued msg_id=%d", msg_id);
         return true;
     }
@@ -159,7 +172,7 @@ bool mqtt_safe_publish(const char *topic, const char *payload)
     }
 }
 
-void mqtt_publish_task()
+void mqtt_publish_task() // test!!!
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
@@ -173,18 +186,16 @@ void mqtt_publish_task()
                            "{\"time\":\"%s\","
                            "\"temperature\":%.2f,"
                            "\"oxygen\":%.2f,"
-                           "\"salinity\":%.2f,"
                            "\"do\":%.2f}",
                            time_history[last_index],
                            temp_history[last_index],
                            oxygen_history[last_index],
-                           salinity_history[last_index],
                            do_history[last_index]);
 
         if (len > 0)
         {
             ESP_LOGI(TAG, "Published payload: %s", payload);
-            mqtt_safe_publish("device/sensor/received", payload);
+            mqtt_safe_publish(payload);
         }
     }
     else
@@ -194,6 +205,9 @@ void mqtt_publish_task()
 }
 void mqtt_spiffs()
 {
+    // iotlf/key/sensor/history
+    char topic_history[64]; // topic for sensor history
+    snprintf(topic_history, sizeof(topic_history), "iotlf/%s/sensor/history", key);
     FILE *f = fopen("/spiffs/unsend.txt", "r");
     if (!f)
     {
@@ -216,7 +230,7 @@ void mqtt_spiffs()
             ESP_LOGE("MQTT", "Payload buffer overflow risk, flush early");
             strcat(payload, "]");
             if (mqtt_connected)
-                esp_mqtt_client_publish(mqtt_client, "device/sensor/history", payload, 0, 1, 1);
+                esp_mqtt_client_publish(mqtt_client, topic_history, payload, 0, 1, 1);
             vTaskDelay(pdMS_TO_TICKS(500));
             strcpy(payload, "[");
             count = 0;
@@ -235,7 +249,7 @@ void mqtt_spiffs()
                 payload[len - 1] = '\0';
             strcat(payload, "]");
             if (mqtt_connected)
-                esp_mqtt_client_publish(mqtt_client, "device/sensor/history", payload, 0, 1, 1);
+                esp_mqtt_client_publish(mqtt_client, topic_history, payload, 0, 1, 1);
             vTaskDelay(pdMS_TO_TICKS(500));
 
             strcpy(payload, "[");
@@ -250,23 +264,24 @@ void mqtt_spiffs()
             payload[len - 1] = '\0';
         strcat(payload, "]");
         if (mqtt_connected)
-            esp_mqtt_client_publish(mqtt_client, "device/sensor/history", payload, 0, 1, 1);
+            esp_mqtt_client_publish(mqtt_client, topic_history, payload, 0, 1, 1);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     fclose(f);
     ESP_LOGI("MQTT", "Finished sending history");
+    vTaskDelete(NULL);
 }
 // do7019
 // RYR404A
 void mqtt_publish_ryr404a_task()
 {
-    char topic[64];
+    char topic_ryr[64];
     char payload[128];
-
+    // iotlf/key/relay/state/ryr404a/1,2,3,4
     for (size_t b = 0; b < RYR_NUM_BOARDS; ++b)
     {
-        snprintf(topic, sizeof(topic), "device/relay/ryr404a/%u", (unsigned)(b + 1));
+        snprintf(topic_ryr, sizeof(topic_ryr), "iotlf/%s/relay/state/ryr404a/%u", key, (unsigned)(b + 1));
         int len = snprintf(payload, sizeof(payload),
                            "{\"board\":%u,\"ch\":[%u,%u,%u,%u]}",
                            (unsigned)(b + 1),
@@ -274,11 +289,12 @@ void mqtt_publish_ryr404a_task()
 
         if (len > 0 && mqtt_connected)
         {
-            esp_mqtt_client_publish(mqtt_client, topic, payload, len, 1, 1);
+            esp_mqtt_client_publish(mqtt_client, topic_ryr, payload, len, 1, 1);
             ESP_LOGI("MQTT", "Send to MQTT");
         }
     }
 }
+
 void mqtt_ryr404a_callback(const char *topic, const char *payload) // {"board":1,"ch":[0,1,0,1]}
 {
     cJSON *root = cJSON_Parse(payload);
@@ -320,11 +336,10 @@ void mqtt_ryr404a_callback(const char *topic, const char *payload) // {"board":1
 // pca9557
 void mqtt_publish_pca9557_task()
 {
-    char topic[64];
+    char topic_pca[64];
     char payload[128];
-
-    snprintf(topic, sizeof(topic), "device/relay/pca9557");
-
+    // iotlf/key/relay/state/pca9557
+    snprintf(topic_pca, sizeof(topic_pca), "iotlf/%s/relay/state/pca9557", key);
     int len = snprintf(payload, sizeof(payload),
                        "{\"ch\":[%u,%u,%u,%u,%u,%u,%u,%u]}",
                        relay_state[0],
@@ -338,7 +353,7 @@ void mqtt_publish_pca9557_task()
 
     if (len > 0 && mqtt_connected)
     {
-        esp_mqtt_client_publish(mqtt_client, topic, payload, len, 1, 1);
+        esp_mqtt_client_publish(mqtt_client, topic_pca, payload, len, 1, 1);
         ESP_LOGI("MQTT", "Publish Relay State: %s", payload);
     }
 }
@@ -368,7 +383,7 @@ void mqtt_pca9557_callback(const char *topic, const char *payload) //{"mask":15}
     pca9557_spiffs(); // funtion save to spiffs pca9557_manage
     mqtt_publish_pca9557_task();
 }
-void mqtt_task(void *pvParameters)
+void mqtt_task(void *pvParameters) // !!test
 {
     ESP_LOGI(TAG, "MQTT Main Task start");
     while (!check_reg_device)

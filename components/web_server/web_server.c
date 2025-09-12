@@ -17,6 +17,8 @@ httpd_handle_t server_handle = NULL; // global
 static const char *TAG_INFO = "INFO";
 static const char *TAG_AP = "wifi_softap_web";
 
+static bool web_start = false;
+
 void replace_placeholder(char *line, size_t line_size,
                          const char *key, const char *value)
 {
@@ -37,7 +39,7 @@ esp_err_t home(httpd_req_t *req)
     char ssid[33] = "Not connected";
     nvs_handle_t nvs_handle;
     size_t ssid_len = sizeof(ssid);
-
+    char connect_str[6];
     if (nvs_open("wifi_creds", NVS_READONLY, &nvs_handle) == ESP_OK)
     {
         nvs_get_str(nvs_handle, "ssid", ssid, &ssid_len);
@@ -52,6 +54,11 @@ esp_err_t home(httpd_req_t *req)
 
     int rssi = 0;
     wifi_ap_record_t ap_info;
+    bool connect = (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
+    if (connect)
+        strcpy(connect_str, "true");
+    else
+        strcpy(connect_str, "false");
     if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK)
         rssi = ap_info.rssi;
 
@@ -71,6 +78,7 @@ esp_err_t home(httpd_req_t *req)
         replace_placeholder(line, sizeof(line), "%DEVICE_ID%", uuidcid); // get uuid form spiffs (device_api.c)
         replace_placeholder(line, sizeof(line), "%RSSI%", rssi_str);
         replace_placeholder(line, sizeof(line), "%KEY%", key);
+        replace_placeholder(line, sizeof(line), "%WIFI%", connect_str);
         if (httpd_resp_send_chunk(req, line, strlen(line)) != ESP_OK)
         {
             fclose(f);
@@ -89,6 +97,7 @@ esp_err_t wifi_manage(httpd_req_t *req)
     size_t ssid_len = sizeof(ssid);
     char ssid_display[33] = "Not connected";
     char buf[2048];
+    char connect_str[6];
     if (nvs_open("wifi_creds", NVS_READONLY, &nvs_handle) == ESP_OK)
     {
         nvs_get_str(nvs_handle, "ssid", ssid, &ssid_len);
@@ -96,6 +105,12 @@ esp_err_t wifi_manage(httpd_req_t *req)
     }
     int rssi = 0;
     wifi_ap_record_t ap_info;
+    bool connect = (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
+    if (connect)
+        strcpy(connect_str, "true");
+    else
+        strcpy(connect_str, "false");
+
     if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK)
         rssi = ap_info.rssi;
 
@@ -111,6 +126,7 @@ esp_err_t wifi_manage(httpd_req_t *req)
     {
         replace_placeholder(line, sizeof(line), "%SSID%", ssid);
         replace_placeholder(line, sizeof(line), "%RSSI%", rssi_str);
+        replace_placeholder(line, sizeof(line), "%WIFI%", connect_str);
 
         if (strstr(line, "%OPTIONS%"))
         {
@@ -342,6 +358,7 @@ esp_err_t spiffs_get_handler(httpd_req_t *req)
 
 httpd_handle_t start_webserver(void)
 {
+    web_start = true;
     if (server_handle != NULL)
     {
         ESP_LOGW("WEBSERVER", "Server already running");
@@ -350,7 +367,7 @@ httpd_handle_t start_webserver(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     httpd_handle_t server = NULL;
     config.stack_size = 16384;
-    config.max_uri_handlers = 16;
+    config.max_uri_handlers = 32;
     if (httpd_start(&server, &config) == ESP_OK)
     {
         httpd_uri_t home_uri = {
@@ -419,6 +436,84 @@ httpd_handle_t start_webserver(void)
             .handler = spiffs_get_handler,
             .user_ctx = NULL};
         httpd_register_uri_handler(server, &offline_uri);
+        httpd_uri_t wrong_uri = {
+            .uri = "/assets/img/wrong.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &wrong_uri);
+        httpd_uri_t correct_uri = {
+            .uri = "/assets/img/correct.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &correct_uri);
+        httpd_uri_t load_uri = {
+            .uri = "/assets/img/loading.gif",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &load_uri);
+        httpd_uri_t arrow_uri = {
+            .uri = "/assets/img/arrow.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &arrow_uri);
+        httpd_uri_t wifi_1_uri = {
+            .uri = "/assets/img/wifi_1.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &wifi_1_uri);
+        httpd_uri_t wifi_2_uri = {
+            .uri = "/assets/img/wifi_2.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &wifi_2_uri);
+        httpd_uri_t wifi_3_uri = {
+            .uri = "/assets/img/wifi_3.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &wifi_3_uri);
+        httpd_uri_t wifi_4_uri = {
+            .uri = "/assets/img/wifi_4.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &wifi_4_uri);
+        httpd_uri_t alert_uri = {
+            .uri = "/assets/img/alert.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &alert_uri);
+        httpd_uri_t wifi_fail_uri = {
+            .uri = "/assets/img/wifi_fail.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &wifi_fail_uri);
+        httpd_uri_t hide_uri = {
+            .uri = "/assets/img/hide.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &hide_uri);
+        httpd_uri_t unhide_uri = {
+            .uri = "/assets/img/unhide.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &unhide_uri);
+        httpd_uri_t down_uri = {
+            .uri = "/assets/img/down.png",
+            .method = HTTP_GET,
+            .handler = spiffs_get_handler,
+            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &down_uri);
     }
     return server;
 }
@@ -430,15 +525,21 @@ void stop_webserver(void)
         server_handle = NULL;
         ESP_LOGI("WEBSERVER", "Server stopped");
     }
+    web_start = false;
 }
 void stop_server_task(void *pvParameter)
 {
-    vTaskDelay(pdMS_TO_TICKS(10000));
-    stop_webserver();
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_LOGI("WEBSERVER", "Server stopped after redirect to /home");
-    wifi_mode_t mode;
-    esp_err_t err_mode = esp_wifi_get_mode(&mode);
-    ESP_LOGI("TAG_SCAN", "Current Wi-Fi mode: %d", mode);
+    if (!web_start)
+    {
+        stop_webserver();
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        wifi_mode_t mode;
+        esp_err_t err_mode = esp_wifi_get_mode(&mode);
+        ESP_LOGI("TAG_SCAN", "Current Wi-Fi mode: %d", mode);
+    }
+    else
+    {
+        ESP_LOGI("WEB", "Set wifi on web");
+    }
     vTaskDelete(NULL);
 }

@@ -14,6 +14,7 @@
 
 extern SemaphoreHandle_t i2c_mutex;
 extern volatile bool i2c_busy ; 
+extern bool load_wifi_screen;
 void i2c_master_init(void);
 void mutex_init(void);
 void release_task_i2c(void);

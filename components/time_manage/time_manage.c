@@ -9,11 +9,13 @@
 #include "esp_wifi.h"
 #include "../i2c_manage/i2c_manage.h"
 #include "../device_api/device_api.h"
+
 #define DS1307_ADDR 0x68
 
 int hour_ds1307;
 int min_ds1307;
 char date_ds1307[4];
+
 bool time_ready = false;
 static bool time_set = false;
 bool time_correct = false;
@@ -190,7 +192,7 @@ void ds1307_task()
                 // check is ever check time with server?
                 if (!already_check)
                 {
-                    // loop check device time with server is already? (device_api)
+                    // loop check device time with server is ready? (device_api)
                     while (!check_time_device)
                     {
                         ESP_LOGW(TAG, "Waiting time_device");
@@ -204,6 +206,7 @@ void ds1307_task()
                     already_check = true;
                     post_time_set();           // send check time to http(device_api.c)
                     check_time_device = false; // set check time(device_time) to default(device_api)
+                    already_check_time = true;
                 }
                 else
                 {
@@ -254,6 +257,6 @@ void ds1307_task()
     {
         ESP_LOGW(TAG, "Cant do about time time (disconnect_wifi)");
         already_check = false;
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(1000)); 
     }
 }

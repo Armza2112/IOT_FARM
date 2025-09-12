@@ -10,6 +10,7 @@
 #include "esp_mac.h"
 #include "wifi_manager.h"
 #include <string.h>
+
 #include "../web_server/web_server.h"
 #include "../time_manage/time_manage.h"
 #include "../button_manage/button_manage.h"
@@ -36,6 +37,9 @@ EventGroupHandle_t wifi_event_group;
 
 bool user_disconnect = false; // var check state dis on web
 bool wrong_password = false;  // var check state wrong password on web
+bool wifi_unconnect = false;
+bool test = false;
+static bool reconnecting = false;
 
 static const char *TAG_SCAN = "wifi_scan";
 static const char *TAG_AP = "wifi_softap_web";
@@ -90,8 +94,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             }
             else // lost connect wifi condition
             {
-                ESP_LOGW("WIFI", "WiFi lost, starting reconnect task");
-                xTaskCreate(wifi_reconnect_task, "wifi_reconnect_task", 4096, NULL, 5, NULL);
+                if (!reconnecting)
+                {
+                    reconnecting = true;
+                    ESP_LOGW("WIFI", "WiFi lost, starting reconnect task");
+                    xTaskCreate(wifi_reconnect_task, "wifi_reconnect_task", 4096, NULL, 5, NULL);
+                }
             }
             break;
         }
@@ -105,7 +113,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             ESP_LOGI("WIFI", "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
             xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
             xTaskCreate(stop_server_task, "stop_server_task", 4096, NULL, 5, NULL); // stop web_server delay(10000)
-            show_wifi_screen = false;                                               // OLED flag
+            wifi_unconnect = false;
+            reconnecting = false; // OLED flag
+            test = false;
         }
     }
 }
@@ -311,6 +321,7 @@ void connect_wifi_nvs()
             else
             {
                 ESP_LOGI(TAG_RE, "Can't Connecting: %s", ssid);
+                xTaskCreate(wifi_reconnect_task, "wifi_reconnect_task", 4096, NULL, 5, NULL);
             }
         }
         else
@@ -333,29 +344,57 @@ void connect_wifi_nvs()
         ESP_LOGI(TAG_AP, "Cannot open NVS");
     }
 }
-void wifi_reconnect_task()
+void wifi_reconnect_task(void *pvParameters)
 {
+    test = true;
     char ssid[33] = {0}, password[65] = {0};
     size_t ssid_len = sizeof(ssid), pass_len = sizeof(password);
     nvs_handle_t nvs_handle;
-
-    while (1)
+    int counter = 0;
+    if (nvs_open("wifi_creds", NVS_READONLY, &nvs_handle) == ESP_OK)
     {
-        if (nvs_open("wifi_creds", NVS_READONLY, &nvs_handle) == ESP_OK)
+        if (nvs_get_str(nvs_handle, "ssid", ssid, &ssid_len) == ESP_OK &&
+            nvs_get_str(nvs_handle, "password", password, &pass_len) == ESP_OK)
         {
-            if (nvs_get_str(nvs_handle, "ssid", ssid, &ssid_len) == ESP_OK &&
-                nvs_get_str(nvs_handle, "password", password, &pass_len) == ESP_OK)
+            wifi_config_t wifi_config = {};
+            strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
+            strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
+            esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+
+            while (1) // 🔄 รอจนกว่าจะต่อสำเร็จ
             {
-                wifi_config_t wifi_config = {};
-                strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
-                strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
-                esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+                ESP_LOGI("WIFI", "Trying to reconnect to SSID: %s", ssid);
                 esp_wifi_connect();
-                ESP_LOGI("WIFI", "Reconnecting to saved SSID: %s", ssid);
+
+                EventBits_t bits = xEventGroupWaitBits(
+                    wifi_event_group,
+                    WIFI_CONNECTED_BIT,
+                    pdFALSE,
+                    pdFALSE,
+                    pdMS_TO_TICKS(8000));
+                if (bits & WIFI_CONNECTED_BIT)
+                {
+                    ESP_LOGI("WIFI", "Reconnected successfully");
+                    reconnecting = false;
+                    vTaskDelete(NULL); // ✅ ปิด task เลยเมื่อสำเร็จ
+                    return;
+                }
+
+                ESP_LOGW("WIFI", "Reconnect failed, retrying...");
+                if (counter == 3)
+                {
+                    vTaskDelay(pdMS_TO_TICKS(5000)); // เว้น 5 วิค่อยลองใหม่
+                }
+                else
+                {
+                    wifi_unconnect = true;
+                    vTaskDelay(pdMS_TO_TICKS(10000)); // เว้น 5 วิค่อยลองใหม่
+                }
             }
-            nvs_close(nvs_handle);
         }
-        vTaskDelay(pdMS_TO_TICKS(60000));
+        nvs_close(nvs_handle);
     }
+
+    reconnecting = false;
     vTaskDelete(NULL);
 }

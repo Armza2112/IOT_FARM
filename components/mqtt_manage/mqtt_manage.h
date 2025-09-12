@@ -4,6 +4,7 @@
 #include <time.h> //test
 
 extern bool mqtt_connected;
+extern bool send_data ;
 
 void mqtt_init();
 void mqtt_publish_task(void *pvParameters);

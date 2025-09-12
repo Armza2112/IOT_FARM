@@ -18,7 +18,7 @@ void IRAM_ATTR button_isr_handler(void *arg)
     int level = gpio_get_level(MODE_BUTTON);
     if (level == 0)
     {
-        esp_timer_start_once(long_press_timer, 5000000); 
+        esp_timer_start_once(long_press_timer, 1000000); 
     }
     else
     {
@@ -29,7 +29,6 @@ static TaskHandle_t webserver_task_handle = NULL;
 
 void webserver_task(void *arg)
 {
-    vTaskDelay(pdMS_TO_TICKS(2000));
     show_wifi_screen=true;
     esp_netif_ip_info_t ip_info;
     esp_netif_t* ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
@@ -46,7 +45,6 @@ void button_handler_task(void *arg)
     esp_netif_get_ip_info(ap_netif, &ip_info);
     ESP_LOGI("WEB", "SoftAP IP: " IPSTR, IP2STR(&ip_info.ip));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    vTaskDelay(pdMS_TO_TICKS(2000)); 
     xTaskCreate(webserver_task, "webserver_task", 8192, NULL, 5, NULL);
     xTaskCreate(wifi_scan_task, "wifi_scan_task", 8192, NULL, 5, NULL);
     vTaskDelete(NULL);

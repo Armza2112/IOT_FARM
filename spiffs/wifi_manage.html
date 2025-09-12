@@ -1,153 +1,401 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wifi Manage page</title>
     <style>
-         @font-face {
-            font-family: 'headerfont';
-            src: url('/assets/fnt/header.ttf') format('truetype');
-        }
-         @font-face {
-            font-family: 'detailfont';
-            src: url('/assets/fnt/detail.ttf') format('truetype');
-        }
-        .button{
-            width: 350px;
-            height: 40px;
-            border-radius: 10px;
+      @font-face {
+        font-family: "headerfont";
+        src: url("/assets/fnt/header.ttf") format("truetype");
+      }
+      @font-face {
+        font-family: "detailfont";
+        src: url("/assets/fnt/detail.ttf") format("truetype");
+      }
+      .button {
+        width: 350px;
+        height: 40px;
+        border-radius: 10px;
+        font-family: "detailfont";
+        font-weight: bold;
+        outline: none;
+        border: none;
+        box-shadow: none;
+        background-color: #3b83c5;
+        color: white;
+      }
+      .button:disabled {
+        width: 350px;
+        height: 40px;
+        border-radius: 10px;
+        font-family: "detailfont";
+        font-weight: bold;
+        outline: none;
+        border: none;
+        box-shadow: none;
+        background-color: #58595a;
+        color: white;
+      }
+      .text__wifi {
+        color: white;
+        font-family: "detailfont";
+        font-weight: bold;
+      }
+      .input__box {
+        width: 350px;
+        height: 40px;
+        background-color: #2f2f2f;
+        color: #9b9b9b;
+        border: none;
+        border-radius: 10px;
+        padding: 5px 20px;
+        outline: none;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        box-sizing: border-box;
+        font-family: "detailfont";
+      }
+      .input-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 350px;
+        height: 40px;
+        background-color: #2f2f2f;
+        border-radius: 10px;
+        margin-bottom: 15px;
+      }
+      .input-wrapper input {
+        flex: 1;
+        height: 40px;
+        border: none;
+        outline: none;
+        background: transparent;
+        color: #9b9b9b;
+        font-family: "detailfont";
+      }
+      .input-wrapper img {
+        margin-right: 20px;
+      }
+    </style>
+  </head>
+
+  <body
+    style="
+      background-color: #262626;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 30px;
+      height: calc(var(--vh, 1vh) * 100);
+    "
+  >
+    <img id="backBtn" src="/assets/img/arrow.png" width="30px" />
+    <div
+      style="
+        display: flex;
+        justify-content: center;
+        flex-direction: column;
+        align-items: center;
+        margin-top: 40px;
+        background-color: #262626;
+        gap: 50px;
+      "
+    >
+      <div style="display: flex; align-items: center">
+        <div>
+          <img src="/assets/img/LOGO.png" alt="Logo" width="110px" />
+        </div>
+        <div style="margin-left: 10px">
+          <div>
+            <h1
+              style="
+                margin: 0;
+                font-family: 'headerfont';
+                color: white;
+                font-size: 38px;
+                white-space: nowrap;
+              "
+              ;
+            >
+              WEB MANAGEMENT
+            </h1>
+            <p
+              style="
+                text-align: right;
+                margin: 0;
+                font-family: 'headerfont';
+                color: white;
+                font-size: 12px;
+              "
+            >
+              V.1.0.0
+            </p>
+          </div>
+          <div
+            style="
+              width: 100%;
+              height: 2px;
+              background-color: grey;
+              margin-top: 5px;
+              margin-bottom: 5px;
+            "
+          ></div>
+          <div>
+            <h2 style="margin: 0; font-family: 'headerfont'; color: grey">
+              WiFi Manage Page
+            </h2>
+          </div>
+        </div>
+      </div>
+      <div
+        style="
+          width: 100%;
+          background-color: #2f2f2f;
+          border-radius: 10px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        "
+      >
+        <div style="text-align: center">
+          <div
+            style="gap: 10px; display: flex; align-items: center; height: 70px"
+          >
+            <img id="wifiIMG" width="20px" />
+            <p id="wifiSSID" class="text__wifi" style="font-size: 12px">-</p>
+          </div>
+          <!-- <p id="wifiRSSI" class="text__wifi" style="font-size: 10px">-</p> -->
+        </div>
+      </div>
+      <div>
+        <button
+          id="refreshBtn"
+          style="
+            border-radius: 5px;
+            outline: none;
+            border: none;
+            box-shadow: none;
+            background-color: #2f2f2f;
+            color: #9b9b9b;
+            width: 80px;
+            height: 30px;
             font-family: 'detailfont';
             font-weight: bold;
-            outline: none;         
-            border: none;          
-            box-shadow: none;     
-        }
-        .text__wifi{
+            font-size: 14px;
+          "
+        >
+          Wifi scan
+        </button>
+      </div>
+      <div>
+        <form method="POST" style="text-align: center;" id="wifiFORM">
+          <div class="input-wrapper">
+            <select id="ssidSELECT" name="ssid" class="input__box">
+              <option value="" disabled selected>Select Your WiFi</option>
+              %OPTIONS%
+            </select>
+            <img width="15px" src="/assets/img/down.png" />
+          </div>
+          <div class="input-wrapper">
+            <input
+              type="password"
+              id="pass"
+              name="password"
+              class="input__box"
+              oninput="countChars()"
+            />
+            <img id="togglePass" width="15px" src="/assets/img/hide.png" />
+          </div>
+          <p
+            id="statusName"
+            style="text-align: center; color: white; font-family: 'detailfont'"
+          ></p>
+          <button id="Btn" class="button" type="submit"></button>
+        </form>
+        <p style="color: gray; font-family: 'headerfont'; text-align: center">
+          Powered by Lerthings
+        </p>
+      </div>
+      <div
+        id="popup"
+        style="
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          justify-content: center;
+          align-items: center;
+        "
+      >
+        <div
+          style="
+            background: #2f2f2f;
+            padding: 50px;
+            border-radius: 10px;
             color: white;
             font-family: 'detailfont';
-            font-weight: bold;
-        }
-        .input__box{
-            width: 350px;
-            height: 40px;  
-            background-color: #2F2F2F;   
-            color: #9B9B9B;                
-            border: none;
-            border-radius: 10px;
-            padding: 5px 20px;
-            outline: none;
-            appearance: none;            
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            box-sizing: border-box;
-            font-family: 'detailfont';
-        }
-    </style>
-</head>
-<body style="display: flex; justify-content: center; flex-direction:column; align-items: center; margin: 0; background-color: #262626; gap:50px; padding-left:50px; padding-right:50px; height: calc(var(--vh, 1vh) * 100);">
-    <div style="display: flex; align-items: center; "> 
-        <div>
-            <img src="/assets/img/LOGO.png" alt="Logo" width="110px">
+            text-align: center;
+            height: 300px;
+          "
+        >
+          <img id="popImg" alt="Logo" width="60px" />
+          <h1
+            id="popTopic"
+            style="font-family: 'headerfont'; color: white"
+          ></h1>
+          <p
+            id="popupMsg"
+            style="font-family: 'detailfont'; color: #838383; margin-top: 50px"
+          ></p>
+          <button
+            id="acceptBtn"
+            style="
+              margin-top: 50px;
+              height: 40px;
+              width: 150px;
+              border: none;
+              border-radius: 5px;
+              background: #3b83c5;
+              color: white;
+              font-family: 'detailfont';
+              font-weight: bold;
+              font-size: 12px;
+            "
+          >
+            Accecpt
+          </button>
         </div>
-        <div style="margin-left:10px">
-            <div >
-                <h1 style="margin: 0; font-family:'headerfont'; color:white; font-size:42px";>IOT V6 WEB</h1>
-                <p style="text-align:right; margin: 0; font-family:'headerfont'; color:white; font-size:12px">V.0.0.1</p>
-            </div>
-            <div style="width: 100%; height:2px; background-color:grey; margin-top:5px; margin-bottom:5px;">
-            </div>
-            <div>
-                <h2 style="margin: 0; font-family:'headerfont'; color:grey">WiFi Manage Page</h2>
-            </div>
-        </div>
-    </div>
-    <div style="width: 100%; background-color:#2F2F2F; border-radius:10px; display:flex; justify-content:center; align-items:center;">
-        <div style="text-align:center">
-            <div style="gap:10px; display:flex; align-items:center;">
-                <img id="wifiIMG" width="20px"/>
-                <p id="wifiSSID" class="text__wifi" style="font-size: 12px;">-</p>
-            </div>
-            <p id="wifiRSSI" class="text__wifi" style="font-size: 10px;">-</p>
-        </div>
-    </div>
-    <div>
-        <button id="refreshBtn" style="border-radius: 5px; outline: none; border: none; box-shadow: none; background-color: #2F2F2F; color:#9B9B9B; width:70px; height:30px; font-family:'detailfont'; font-weight: bold;font-size:14px;">Wifi scan</button>
-    </div>
-    <div>
-        <form method="POST" style="text-align: center;" id="wifiFORM">
-        <select id="ssidSELECT" name="ssid" class="input__box">
-            %OPTIONS%
-        </select><br><br>
-        <input type="password" id="pass" name="password" class="input__box"/><br><br>
-        <p id="statusName" style="text-align: center;"></p>
-        <button id="Btn" class="button" style="background-color: #3B83C5; color:white" type="submit"></button>
-    </form>
-    <p style="color: gray; font-family: 'headerfont'; text-align:center;">Powered by Lertthings</p>
-    </div>
-    <script>
-        let ssid = "%SSID%";  
-        let rrsi ="%RSSI%"
-        let btn = document.getElementById('Btn');  
-        let status = document.getElementById('statusName');  
-        let select = document.getElementById('ssidSELECT');  
+      </div>
+      <script>
+        let ssid = "%SSID%";
+        let wifi = "%WIFI%";
+        let rssi = parseInt("%RSSI%");
+        let btn = document.getElementById("Btn");
+        let status = document.getElementById("statusName");
+        let select = document.getElementById("ssidSELECT");
         let hidden = document.createElement("input");
-        let form = document.getElementById("wifiFORM")
-        if (ssid && ssid !== "" && ssid!= "Not connected") {
-            document.getElementById('wifiIMG').src = "/assets/img/online.png";
-            document.getElementById('wifiSSID').textContent = "Connected to: "+ssid;
-            document.getElementById('wifiRSSI').textContent = "Level Signal: " + rrsi + "dbm";
-            select.innerHTML = `<option value="${ssid}" selected>${ssid}</option>`;
-            document.getElementById('pass').placeholder = "***************";
-            select.disabled = true;
-            select.parentNode.appendChild(hidden);
-            hidden.type = "hidden";
-            hidden.name = "ssid";
-            hidden.value = ssid;
-            form.action = "/disconnect";
-            btn.textContent="Disconnect"
+        let form = document.getElementById("wifiFORM");
+        const passInput = document.getElementById("pass");
+        const toggleBtn = document.getElementById("togglePass");
+        if (ssid && ssid !== "" && ssid != "Not connected") {
+          if (wifi == "false")
+            document.getElementById("wifiIMG").src =
+              "/assets/img/wifi_fail.png";
+          else if (rssi >= -50)
+            document.getElementById("wifiIMG").src = "/assets/img/wifi_4.png";
+          else if (rssi >= -65)
+            document.getElementById("wifiIMG").src = "/assets/img/wifi_3.png";
+          else if (rssi >= -80)
+            document.getElementById("wifiIMG").src = "/assets/img/wifi_2.png";
+          else if (rssi >= -95)
+            document.getElementById("wifiIMG").src = "/assets/img/wifi_1.png";
+          document.getElementById("pass").disabled = true;
+          btn.disabled = false;
+          document.getElementById("wifiSSID").textContent =
+            "Connected to: " + ssid;
+          select.innerHTML = `<option value="${ssid}" selected>${ssid}</option>`;
+          document.getElementById("pass").placeholder = "***************";
+          select.disabled = true;
+          select.parentNode.appendChild(hidden);
+          hidden.type = "hidden";
+          hidden.name = "ssid";
+          hidden.value = ssid;
+          form.action = "/disconnect";
+          btn.textContent = "Disconnect";
         } else {
-            document.getElementById('wifiIMG').src = "/assets/img/offline.png";
-            document.getElementById('wifiSSID').textContent = "Unconnected WiFi";
-            btn.textContent="Connect"
-            form.action = "/connect";
+          document.getElementById("wifiIMG").src = "/assets/img/offline.png";
+          document.getElementById("wifiSSID").textContent = "Unconnected WiFi";
+          btn.textContent = "Connect";
+          form.action = "/connect";
+          document.getElementById("pass").placeholder = "Enter WiFi Password";
         }
         function setVh() {
-        let vh = window.innerHeight * 0.01;
-        document.documentElement.style.setProperty('--vh', `${vh}px`);
+          let vh = window.innerHeight * 0.01;
+          document.documentElement.style.setProperty("--vh", `${vh}px`);
         }
         setVh();
-        window.addEventListener('resize', setVh);
-        document.getElementById('wifiFORM').addEventListener('submit', async (e) => {
-    e.preventDefault();
+        window.addEventListener("resize", setVh);
+        document
+          .getElementById("wifiFORM")
+          .addEventListener("submit", async (e) => {
+            e.preventDefault();
 
-    const formData = new FormData(e.target);
-    const body = new URLSearchParams(formData);
+            const formData = new FormData(e.target);
+            const body = new URLSearchParams(formData);
 
-    if (btn.textContent === "Connect") {
-        const resp = await fetch('/connect', { method: 'POST', body });
-        const data = await resp.json();
-        if (data.status === 'ok') {
-            status.textContent = "Connecting...";
-            status.style.color = "green"
-            window.location.href = "/";
-        } else {
-            status.textContent = "Wrong password";
-            status.style.color = "red"
+            if (btn.textContent === "Connect") {
+              const resp = await fetch("/connect", { method: "POST", body });
+              const data = await resp.json();
+              if (data.status === "ok") {
+                document.getElementById("popImg").src =
+                  "/assets/img/correct.png";
+                document.getElementById("popTopic").textContent =
+                  "Wifi connect";
+                document.getElementById("popupMsg").textContent =
+                  "✅ Wifi connect! Please press accept.";
+                document.getElementById("popup").style.display = "flex";
+                //window.location.reload();
+              } else {
+                document.getElementById("popImg").src = "/assets/img/wrong.png";
+                document.getElementById("popTopic").textContent =
+                  "Wrong Password";
+                document.getElementById("popupMsg").textContent =
+                  "❌ Wrong password! Please try again.";
+                document.getElementById("popup").style.display = "flex";
+              }
+            } else if (btn.textContent === "Disconnect") {
+              const resp = await fetch("/disconnect", { method: "POST" });
+              const data = await resp.json();
+              if (data.status === "disconnecting") {
+                document.getElementById("popImg").src =
+                  "/assets/img/correct.png";
+                document.getElementById("popTopic").textContent = "Disconnect";
+                document.getElementById("popupMsg").textContent =
+                  "❌ Wifi disconnect! Please reconnect your wifi.";
+                document.getElementById("popup").style.display = "flex";
+              }
+            }
+          });
+        document.getElementById("refreshBtn").addEventListener("click", () => {
+          window.location.reload();
+        });
+        document.getElementById("backBtn").addEventListener("click", () => {
+          window.location.href = "/";
+        });
+        document.getElementById("acceptBtn").addEventListener("click", () => {
+          document.getElementById("popup").style.display = "none";
+          window.location.reload();
+        });
+        document.getElementById("Btn").addEventListener("click", () => {
+          document.getElementById("popImg").src = "/assets/img/loading.gif";
+          document.getElementById("popTopic").textContent = "Loading....";
+          document.getElementById("popupMsg").textContent =
+            "◌ Loading connect wifi!. Please wait.";
+          document.getElementById("popup").style.display = "flex";
+        });
+        function countChars() {
+          const input = document.getElementById("pass");
+          if (btn.textContent === "Connect") {
+            if (input.value.length >= 6) btn.disabled = false;
+            else btn.disabled = true;
+          }
         }
-    } else if (btn.textContent === "Disconnect") {
-        const resp = await fetch('/disconnect', { method: 'POST' });
-        const data = await resp.json();
-        if (data.status === 'disconnecting') {
-            status.textContent = "Disconnecting...";
-            status.style.color = "red"
-            setTimeout(() => { window.location.href = "/"; }, 5000);
-        }
-    }
-});
-    document.getElementById("refreshBtn").addEventListener("click", () => {
-        window.location.reload();
-    });
-    </script>
-</body>
+        toggleBtn.addEventListener("click", () => {
+          if (passInput.type === "password") {
+            passInput.type = "text";
+            toggleBtn.src = "/assets/img/unhide.png";
+          } else {
+            passInput.type = "password";
+            toggleBtn.src = "/assets/img/hide.png";
+          }
+        });
+        window.addEventListener("DOMContentLoaded", countChars);
+      </script>
+    </div>
+  </body>
 </html>

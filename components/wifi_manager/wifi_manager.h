@@ -19,7 +19,8 @@ extern EventGroupHandle_t wifi_event_group;
 
 extern bool user_disconnect;
 extern bool wrong_password;
-
+extern bool wifi_unconnect;
+extern bool test;
 void wifi_connect(const char *ssid, const char *password);
 void wifi_init_apsta(void);
 void wifi_scan_task(void *pvParameters);

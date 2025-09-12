@@ -20,6 +20,7 @@
 SemaphoreHandle_t i2c_mutex;
 // flags
 volatile bool i2c_busy = false;
+bool load_wifi_screen =false;
 
 void i2c_master_init()
 {
@@ -96,7 +97,7 @@ void i2c_main_task()
     release_task_i2c();
     ESP_ERROR_CHECK(pca9557_init_once());
     release_task_i2c();
-    vTaskDelay(pdMS_TO_TICKS(4000));
+    vTaskDelay(pdMS_TO_TICKS(1000));
     while (1)
     {
         safe_i2c_action(ds1307_task);
@@ -104,10 +105,12 @@ void i2c_main_task()
         if (show_wifi_screen)
         {
             safe_i2c_action(draw_wifi_screen);
+            load_wifi_screen=true;
             ESP_LOGI("I2C_FLAG", "After draw_wifi_screen: i2c_busy=%s", i2c_busy ? "true" : "false");
         }
         else
         {
+            load_wifi_screen=false;
             safe_i2c_action(draw_main_screen);
             ESP_LOGI("I2C_FLAG", "After draw_main_screen: i2c_busy=%s", i2c_busy ? "true" : "false");
         }

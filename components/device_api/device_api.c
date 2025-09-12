@@ -35,7 +35,7 @@ bool check_server_alive()
     ESP_LOGI("CHECK", "Checking server alive...");
 
     esp_http_client_config_t config = {
-        .url = "http://192.168.1.119:4000/",
+        .url = "http://192.168.1.132:4000/",
         .method = HTTP_METHOD_HEAD,
         .timeout_ms = 3000,
     };
@@ -74,7 +74,7 @@ void post_uuid()
     snprintf(post_data, sizeof(post_data), "{\"uuid\": \"%s\"}", uuidcid);
 
     esp_http_client_config_t config = {
-        .url = "http://192.168.1.119:4000/device/uuid",
+        .url = "http://192.168.1.132:4000/device/uuid",
         .method = HTTP_METHOD_POST,
         // .crt_bundle_attach = esp_crt_bundle_attach,
         .timeout_ms = 10000,
@@ -127,7 +127,7 @@ void post_time_set()
             snprintf(post_data, sizeof(post_data), "{\"set_t\": \"%s\"}", time_correct ? "true" : "false");
 
             esp_http_client_config_t config = {
-                .url = "http://192.168.1.119:4000/device/time_set",
+                .url = "http://192.168.1.132:4000/device/time_set",
                 .method = HTTP_METHOD_POST,
                 // .crt_bundle_attach = esp_crt_bundle_attach,
                 .timeout_ms = 10000,
@@ -177,7 +177,7 @@ void post_time_set()
 void get_device_reg()
 {
     esp_http_client_config_t config = {
-        .url = "http://192.168.1.119:4000/device/get/reg",
+        .url = "http://192.168.1.132:4000/device/get/reg",
         .method = HTTP_METHOD_POST,
         .timeout_ms = 10000,
     };
@@ -263,7 +263,7 @@ void get_device_reg()
 void get_device_data()
 {
     esp_http_client_config_t config = {
-        .url = "http://192.168.1.119:4000/device/get/data",
+        .url = "http://192.168.1.132:4000/device/get/data",
         .method = HTTP_METHOD_POST,
         .timeout_ms = 10000,
     };

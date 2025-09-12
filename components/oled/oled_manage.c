@@ -6,11 +6,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <u8g2.h>
+#include <esp_wifi.h>
+#include <time.h>
+
 #include "image_hex.h"
 #include "u8g2_esp32_hal.h"
 #include "qrcode.h"
-#include <esp_wifi.h>
-#include <time.h>
+
 #include "../data_esp32/data_esp32.h"
 #include "../button_manage/button_manage.h"
 #include "../time_manage/time_manage.h"
@@ -18,13 +20,13 @@
 #include "../mqtt_manage/mqtt_manage.h"
 #include "../pca9557_manage/pca9557_manage.h"
 #include "../device_api/device_api.h"
+#include "../wifi_manager/wifi_manager.h"
 
 #define PIN_SDA 21
 #define PIN_SCL 22
 
 // Flags
 bool blink_state = false;
-bool send_data = false;
 bool error_message = true;
 
 // OLED
@@ -56,11 +58,23 @@ void oled_init()
     }
 }
 
-void oled_center_text(const char *text, int y)
+void oled_center_text(const char *text, int x)
 {
     int str_width = u8g2_GetStrWidth(&u8g2, text);
     int center_x = (128 - str_width) / 2;
-    u8g2_DrawStr(&u8g2, center_x, y, text);
+    u8g2_DrawStr(&u8g2, center_x, x, text);
+}
+void oled_all_center_text(const char *text)
+{
+
+    int str_width = u8g2_GetStrWidth(&u8g2, text);
+
+    int str_height = u8g2_GetMaxCharHeight(&u8g2);
+
+    int x = (128 - str_width) / 2;
+    int baseline_y = (64 + str_height) / 2;
+
+    u8g2_DrawStr(&u8g2, x, baseline_y, text);
 }
 
 void draw_startup()
@@ -92,6 +106,22 @@ void draw_wifi_screen()
 {
     if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(2000)))
     {
+        u8g2_ClearBuffer(&u8g2);
+        char *load = "WiFi MODE";
+        char load_dot[16];
+        if (!load_wifi_screen)
+        {
+            for (int j = 0; j < 6; j++)
+            {
+                snprintf(load_dot, sizeof(load_dot), "%s%.*s", load, j + 1, "......");
+                u8g2_ClearBuffer(&u8g2);
+                u8g2_SetFont(&u8g2, u8g2_font_6x10_tr);
+                oled_all_center_text(load_dot);
+                u8g2_SendBuffer(&u8g2);
+                xSemaphoreGive(i2c_mutex);
+                vTaskDelay(pdMS_TO_TICKS(500));
+            }
+        }
         u8g2_ClearBuffer(&u8g2);
         u8g2_SetFont(&u8g2, u8g2_font_timB08_tr);
         oled_center_text("WIFI MANAGE", 8);
@@ -129,10 +159,8 @@ void draw_wifi_screen()
         xSemaphoreGive(i2c_mutex);
     }
 }
-
 void draw_main_screen()
 {
-
     if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(2000)))
     {
         u8g2_ClearBuffer(&u8g2);
@@ -142,7 +170,19 @@ void draw_main_screen()
         get_sta_rssi(&rssi, rssi_str, sizeof(rssi_str));
         wifi_ap_record_t ap_info;
         bool connect = (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
-        if (connect)
+
+        if (!connect && !wifi_unconnect && test)
+        {
+            if (rssi >= -50)
+                u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_4_icon);
+            else if (rssi >= -65)
+                u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_3_icon);
+            else if (rssi >= -80)
+                u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_2_icon);
+            else if (rssi >= -95)
+                u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_1_icon);
+        }
+        else if (connect && !wifi_unconnect && test)
         {
             if (rssi >= -50)
                 u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_4_icon);
@@ -153,10 +193,20 @@ void draw_main_screen()
             else
                 u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_1_icon);
         }
-        else if (blink_state)
+        else if (connect)
         {
-            u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_unconnect_icon);
+            if (rssi >= -50)
+                u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_4_icon);
+            else if (rssi >= -65)
+                u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_3_icon);
+            else if (rssi >= -80)
+                u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_2_icon);
+            else
+                u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_1_icon);
         }
+
+        else if (blink_state)
+            u8g2_DrawXBM(&u8g2, 116, 0, 10, 10, wifi_unconnect_icon);
 
         // RTC
         struct tm ds_time = {0};
@@ -189,12 +239,23 @@ void draw_main_screen()
         u8g2_DrawStr(&u8g2, 42, 50, "%");
         u8g2_DrawStr(&u8g2, 97, 50, "g/L");
 
-        if (send_data || blink_state)
+        if (send_data)
+        {
+            if (blink_state)
+            {
+                u8g2_DrawXBM(&u8g2, 77, 0, 10, 10, data_icon);
+            }
+        }
+        else
             u8g2_DrawXBM(&u8g2, 77, 0, 10, 10, data_icon);
+
+        // if (send_data || blink_state)
+        //     u8g2_DrawXBM(&u8g2, 77, 0, 10, 10, data_icon);
         if (server_connected || blink_state)
             u8g2_DrawXBM(&u8g2, 57, 0, 10, 10, server_icon);
         if (error_message && blink_state)
             u8g2_SetFont(&u8g2, u8g2_font_6x10_tr);
+
         oled_center_text("Error message: 2", 64);
 
         u8g2_SendBuffer(&u8g2);
