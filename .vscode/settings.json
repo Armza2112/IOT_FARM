@@ -47,7 +47,8 @@
     "do7019_manage.h": "c",
     "device_api.h": "c",
     "cmath": "c",
-    "complex": "c"
+    "complex": "c",
+    "stdint.h": "c"
   },
   "idf.flashType": "UART"
 }

@@ -130,13 +130,17 @@ esp_err_t wifi_manage(httpd_req_t *req)
 
         if (strstr(line, "%OPTIONS%"))
         {
-            char options[2048] = {0};
+            char options[1024] = {0};
             for (int i = 0; i < scanned_ap_count; i++)
             {
-                char opt[128];
-                snprintf(opt, sizeof(opt), "<option value=\"%s\">%s (%d dBm)</option>",
-                         (char *)scanned_aps[i].ssid, (char *)scanned_aps[i].ssid, scanned_aps[i].rssi);
-                strlcat(options, opt, sizeof(options));
+                const char *ssid = (char *)scanned_aps[i].ssid;
+                if (strlen(ssid) != 0)
+                {
+                    char opt[128];
+                    snprintf(opt, sizeof(opt), "<option value=\"%s\">%s (%d dBm)</option>",
+                             (char *)scanned_aps[i].ssid, (char *)scanned_aps[i].ssid, scanned_aps[i].rssi);
+                    strlcat(options, opt, sizeof(options));
+                }
             }
 
             replace_placeholder(line, sizeof(line), "%OPTIONS%", options);

@@ -107,14 +107,14 @@
         <div>
           <img src="/assets/img/LOGO.png" alt="Logo" width="110px" />
         </div>
-        <div style="margin-left: 10px">
+        <div style="margin: 20px">
           <div>
             <h1
               style="
                 margin: 0;
                 font-family: 'headerfont';
                 color: white;
-                font-size: 38px;
+                font-size: 24px;
                 white-space: nowrap;
               "
               ;
@@ -190,7 +190,7 @@
         </button>
       </div>
       <div>
-        <form method="POST" style="text-align: center;" id="wifiFORM">
+        <form method="POST" style="text-align: center" id="wifiFORM">
           <div class="input-wrapper">
             <select id="ssidSELECT" name="ssid" class="input__box">
               <option value="" disabled selected>Select Your WiFi</option>
@@ -307,6 +307,8 @@
           hidden.value = ssid;
           form.action = "/disconnect";
           btn.textContent = "Disconnect";
+          toggleBtn.style.display = "none";
+          select.nextElementSibling.style.display = "none"; // element select >next is> img notdisplay
         } else {
           document.getElementById("wifiIMG").src = "/assets/img/offline.png";
           document.getElementById("wifiSSID").textContent = "Unconnected WiFi";

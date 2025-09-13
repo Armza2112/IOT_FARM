@@ -18,4 +18,4 @@ extern const unsigned char server_icon[];
 
 extern const unsigned char logo[];
 
-#endif // WIFI_ICON_H
+#endif //IMAGE_HEX_H

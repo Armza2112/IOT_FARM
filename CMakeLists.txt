@@ -15,6 +15,5 @@ set(EXTRA_COMPONENT_DIRS
     ${CMAKE_SOURCE_DIR}/lib/i2cdev
     ${CMAKE_SOURCE_DIR}/lib/esp_idf_lib_helpers
     ${CMAKE_SOURCE_DIR}/lib/esp-modbus-master
-   
 )
 project(IOT_FARM)
